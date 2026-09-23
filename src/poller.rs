@@ -52,8 +52,13 @@ impl PollerHandle {
     /// Returns how many feeds were scheduled.
     pub async fn refresh(&self, scope: FeedScope) -> Result<u64, DbError> {
         let scheduled = self.db.mark_due(scope, Utc::now()).await?;
-        self.wake.notify_one();
+        self.wake();
         Ok(scheduled)
+    }
+
+    /// Makes the poller re-check the schedule now, e.g. after feeds were added as due.
+    pub fn wake(&self) {
+        self.wake.notify_one();
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<PollerEvent> {

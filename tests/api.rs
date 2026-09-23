@@ -483,3 +483,88 @@ mod items {
         assert_eq!(api.sidebar().await["total_unread"], 4);
     }
 }
+
+mod opml {
+    use super::*;
+
+    impl Api {
+        async fn import(&self, body: String) -> (StatusCode, Value) {
+            let response = self
+                .client
+                .post(self.base.join("api/opml").unwrap())
+                .header("content-type", "text/x-opml")
+                .body(body)
+                .send()
+                .await
+                .unwrap();
+            (response.status(), response.json().await.unwrap())
+        }
+    }
+
+    #[tokio::test]
+    async fn import_subscribes_and_fetches_in_the_background() {
+        let api = start().await;
+        let opml = format!(
+            r#"<?xml version="1.0"?><opml version="2.0"><head/><body>
+                 <outline text="Tech"><outline type="rss" text="A" xmlUrl="{}"/></outline>
+                 <outline type="rss" text="B" xmlUrl="{}"/>
+               </body></opml>"#,
+            api.sites.join("a.xml").unwrap(),
+            api.sites.join("b.xml").unwrap()
+        );
+
+        let (status, report) = api.import(opml).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(report, json!({ "added": 2, "skipped": 0, "invalid": [] }));
+        assert_eq!(api.sidebar().await["folders"][0]["name"], "Tech");
+        for _ in 0..100 {
+            if api.sidebar().await["total_unread"] == 8 {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("imported feeds were never fetched");
+    }
+
+    #[tokio::test]
+    async fn import_rejects_documents_that_are_not_opml() {
+        let api = start().await;
+
+        let (status, body) = api.import("<html></html>".to_string()).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["error"].is_string());
+    }
+
+    #[tokio::test]
+    async fn export_downloads_an_opml_file() {
+        let api = start().await;
+        let tech = api.folder("Tech").await;
+        api.subscribe("a.xml", Some(tech)).await;
+
+        let response = api
+            .client
+            .get(api.base.join("api/opml").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers()["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/x-opml")
+        );
+        assert!(
+            response.headers()["content-disposition"]
+                .to_str()
+                .unwrap()
+                .contains("feedr.opml")
+        );
+        let body = response.text().await.unwrap();
+        assert!(body.contains(r#"text="Tech""#));
+        assert!(body.contains(api.sites.join("a.xml").unwrap().as_str()));
+    }
+}

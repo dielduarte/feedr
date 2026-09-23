@@ -63,8 +63,7 @@ impl TryFrom<FeedRow> for Feed {
         Ok(Self {
             id: row.id,
             folder: row.folder_id,
-            url: Url::parse(&row.url)
-                .map_err(|e| DbError::Sqlx(sqlx::Error::Decode(Box::new(e))))?,
+            url: parse_stored_url(&row.url)?,
             site_url: parse_optional_url(row.site_url),
             title: row.title,
             custom_title: row.custom_title,
@@ -77,6 +76,11 @@ impl TryFrom<FeedRow> for Feed {
             last_error: row.last_error,
         })
     }
+}
+
+/// Feed URLs are validated before they are stored, so a failure here means a corrupt row.
+pub(super) fn parse_stored_url(url: &str) -> Result<Url, DbError> {
+    Url::parse(url).map_err(|e| DbError::Sqlx(sqlx::Error::Decode(Box::new(e))))
 }
 
 pub(super) fn parse_optional_url(url: Option<String>) -> Option<Url> {

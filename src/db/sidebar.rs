@@ -1,6 +1,6 @@
 use url::Url;
 
-use super::feeds::parse_optional_url;
+use super::feeds::{parse_optional_url, parse_stored_url};
 use super::{Db, DbError, Folder};
 use crate::model::{FeedId, FolderId};
 
@@ -20,6 +20,7 @@ pub struct SidebarFolder {
 pub struct SidebarFeed {
     pub id: FeedId,
     pub title: String,
+    pub url: Url,
     pub site_url: Option<Url>,
     pub unread: u32,
     pub last_error: Option<String>,
@@ -42,7 +43,7 @@ impl Db {
     pub async fn sidebar(&self) -> Result<Sidebar, DbError> {
         let rows = sqlx::query!(
             r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId",
-                      COALESCE(custom_title, title) AS "title!: String", site_url, last_error,
+                      COALESCE(custom_title, title) AS "title!: String", url, site_url, last_error,
                       (SELECT COUNT(*) FROM items WHERE items.feed_id = feeds.id AND read_at IS NULL) AS "unread!: u32"
                FROM feeds
                ORDER BY position, id"#
@@ -65,6 +66,7 @@ impl Db {
             let feed = SidebarFeed {
                 id: row.id,
                 title: row.title,
+                url: parse_stored_url(&row.url)?,
                 site_url: parse_optional_url(row.site_url),
                 unread: row.unread,
                 last_error: row.last_error,

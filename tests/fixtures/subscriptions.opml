@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Exported from another reader</title></head>
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline type="rss" text="Rust Blog" title="The Rust Blog" xmlUrl="https://blog.rust-lang.org/feed.xml" htmlUrl="https://blog.rust-lang.org/"/>
+      <outline text="Deep">
+        <outline type="rss" text="Nested Feed" xmlUrl="https://nested.example.com/feed"/>
+      </outline>
+    </outline>
+    <outline text="News">
+      <outline type="rss" text="Text Only" xmlUrl="https://news.example.com/rss"/>
+    </outline>
+    <outline text="Tech">
+      <outline type="rss" text="Julia Evans" xmlUrl="https://jvns.ca/atom.xml"/>
+    </outline>
+    <outline type="rss" text="Loose Feed" xmlUrl="https://loose.example.com/feed"/>
+    <outline type="rss" text="Broken" xmlUrl="not a url"/>
+  </body>
+</opml>

@@ -23,6 +23,24 @@ impl Db {
         })
     }
 
+    /// Returns the folder with this name, creating it at the end if it doesn't exist.
+    pub async fn ensure_folder(&self, name: &str) -> Result<Folder, DbError> {
+        // The no-op update makes RETURNING yield the existing row on conflict.
+        let id = sqlx::query_scalar!(
+            r#"INSERT INTO folders (name, position)
+               VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))
+               ON CONFLICT (name) DO UPDATE SET name = excluded.name
+               RETURNING id AS "id: FolderId""#,
+            name
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Folder {
+            id,
+            name: name.to_string(),
+        })
+    }
+
     pub async fn rename_folder(&self, id: FolderId, name: &str) -> Result<(), DbError> {
         found(
             sqlx::query!("UPDATE folders SET name = ? WHERE id = ?", name, id)
