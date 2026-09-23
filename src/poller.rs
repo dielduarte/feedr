@@ -45,7 +45,9 @@ pub enum BatchHealth {
 pub struct PollerHandle {
     db: Db,
     wake: Arc<Notify>,
-    events: broadcast::Sender<PollerEvent>,
+    /// Weak so the channel closes when the poller stops, ending open event streams and letting
+    /// the server shut down instead of waiting on them forever.
+    events: broadcast::WeakSender<PollerEvent>,
 }
 
 impl PollerHandle {
@@ -61,8 +63,12 @@ impl PollerHandle {
         self.wake.notify_one();
     }
 
+    /// The receiver reports the channel as closed once the poller has stopped.
     pub fn subscribe(&self) -> broadcast::Receiver<PollerEvent> {
-        self.events.subscribe()
+        match self.events.upgrade() {
+            Some(events) => events.subscribe(),
+            None => broadcast::channel(1).1,
+        }
     }
 }
 
@@ -76,7 +82,7 @@ pub fn spawn(
     let handle = PollerHandle {
         db: db.clone(),
         wake: wake.clone(),
-        events: events.clone(),
+        events: events.downgrade(),
     };
     let task = tokio::spawn(run(db, fetcher, wake, events, cancel));
     (handle, task)

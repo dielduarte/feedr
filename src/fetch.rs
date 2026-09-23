@@ -12,6 +12,7 @@ use crate::parse::{ParsedFeed, parse};
 /// Real feeds are well under this; the cap protects against endless or runaway responses.
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 10;
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 
 const USER_AGENT: &str = concat!(
     "feedr/",

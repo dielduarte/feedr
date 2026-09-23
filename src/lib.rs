@@ -1,5 +1,6 @@
 pub mod add_feed;
 pub mod api;
+pub mod cli;
 pub mod db;
 pub mod discover;
 pub mod fetch;
