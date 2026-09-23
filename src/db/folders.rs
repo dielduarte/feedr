@@ -1,7 +1,7 @@
 use super::{Db, DbError, found, place};
 use crate::model::FolderId;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Folder {
     pub id: FolderId,
     pub name: String,

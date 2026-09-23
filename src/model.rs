@@ -1,14 +1,20 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 #[sqlx(transparent)]
 #[serde(transparent)]
 pub struct FolderId(pub i64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 #[sqlx(transparent)]
 #[serde(transparent)]
 pub struct FeedId(pub i64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, sqlx::Type, serde::Serialize, serde::Deserialize,
+)]
 #[sqlx(transparent)]
 #[serde(transparent)]
 pub struct ItemId(pub i64);

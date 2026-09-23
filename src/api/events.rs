@@ -1,31 +1,16 @@
 use std::convert::Infallible;
 
-use axum::Router;
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::routing::get;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::{Stream, StreamExt};
 
-use crate::db::Db;
-use crate::poller::PollerHandle;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: Db,
-    pub poller: PollerHandle,
-}
-
-pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/api/events", get(events))
-        .with_state(state)
-}
+use super::AppState;
 
 /// Live poller activity for the UI. A client that falls too far behind gets a `resync` event
 /// instead of the missed ones, telling it to reload what it shows.
-async fn events(
+pub async fn stream(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let stream = BroadcastStream::new(state.poller.subscribe()).map(|received| {

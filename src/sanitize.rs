@@ -1,7 +1,8 @@
 use ammonia::UrlRelative;
 use url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(transparent)]
 pub struct SanitizedHtml(String);
 
 impl SanitizedHtml {

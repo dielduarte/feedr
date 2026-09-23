@@ -35,7 +35,7 @@ pub struct Page {
     pub next: Option<Cursor>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ItemSummary {
     pub id: ItemId,
     pub feed_id: FeedId,
@@ -48,9 +48,11 @@ pub struct ItemSummary {
     pub starred_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Item {
+    #[serde(flatten)]
     pub summary: ItemSummary,
+    #[serde(rename = "content_html")]
     pub content: Option<SanitizedHtml>,
 }
 

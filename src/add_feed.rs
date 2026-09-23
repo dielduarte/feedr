@@ -8,7 +8,7 @@ use crate::model::{FeedId, FolderId, Validators};
 use crate::parse::{ParsedFeed, parse};
 use crate::schedule::POLL_INTERVAL;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Added {
     pub id: FeedId,
     pub title: String,
@@ -34,6 +34,18 @@ impl From<DbError> for AddFeedError {
             other => Self::Db(other),
         }
     }
+}
+
+/// Turns what someone typed into a web URL, assuming https when the scheme is left out.
+pub fn parse_input(input: &str) -> Option<Url> {
+    let input = input.trim();
+    let url = match Url::parse(input) {
+        Err(url::ParseError::RelativeUrlWithoutBase) => {
+            Url::parse(&format!("https://{input}")).ok()?
+        }
+        parsed => parsed.ok()?,
+    };
+    matches!(url.scheme(), "http" | "https").then_some(url)
 }
 
 /// Accepts either a feed URL or a web page that links to (or hosts) a feed.

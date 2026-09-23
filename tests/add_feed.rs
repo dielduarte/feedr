@@ -192,3 +192,33 @@ async fn reports_an_unreachable_url() {
         Err(AddFeedError::Fetch(FetchError::Http(404)))
     ));
 }
+
+mod input {
+    use feedr::add_feed::parse_input;
+
+    #[test]
+    fn accepts_full_urls() {
+        assert_eq!(
+            parse_input("http://blog.example.com/feed")
+                .unwrap()
+                .as_str(),
+            "http://blog.example.com/feed"
+        );
+    }
+
+    #[test]
+    fn assumes_https_for_bare_domains() {
+        assert_eq!(
+            parse_input("  example.com/blog ").unwrap().as_str(),
+            "https://example.com/blog"
+        );
+    }
+
+    #[test]
+    fn rejects_anything_that_is_not_a_web_address() {
+        assert!(parse_input("not a url").is_none());
+        assert!(parse_input("ftp://example.com/feed").is_none());
+        assert!(parse_input("javascript:alert(1)").is_none());
+        assert!(parse_input("").is_none());
+    }
+}

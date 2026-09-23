@@ -51,13 +51,11 @@ async fn streams_poller_events_to_the_browser() {
     let dir = tempfile::tempdir().unwrap();
     let db = Db::open(&dir.path().join("feedr.db")).await.unwrap();
     let cancel = CancellationToken::new();
-    let (poller, _task) = poller::spawn(
-        db.clone(),
-        Fetcher::new(Duration::from_secs(5)),
-        cancel.clone(),
-    );
+    let fetcher = Fetcher::new(Duration::from_secs(5));
+    let (poller, _task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());
     let app = listen(api::router(AppState {
         db: db.clone(),
+        fetcher,
         poller: poller.clone(),
     }))
     .await;

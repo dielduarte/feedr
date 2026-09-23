@@ -16,7 +16,7 @@ pub struct SidebarFolder {
     pub feeds: Vec<SidebarFeed>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SidebarFeed {
     pub id: FeedId,
     pub title: String,
