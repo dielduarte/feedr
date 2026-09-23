@@ -4,6 +4,7 @@ mod feeds;
 mod folders;
 mod items;
 mod opml;
+mod web;
 
 use axum::Router;
 use axum::routing::{get, patch, post, put};
@@ -40,5 +41,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/items/mark-read", post(items::mark_read))
         .route("/api/items/{id}", get(items::open).patch(items::update))
         .route("/api/opml", get(opml::export).post(opml::import_file))
+        .fallback(web::serve)
         .with_state(state)
 }

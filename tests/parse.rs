@@ -136,3 +136,12 @@ fn rejects_content_that_is_not_a_feed() {
 
     assert!(result.is_err());
 }
+
+#[test]
+fn summarizes_items_as_plain_text_preferring_the_feed_summary() {
+    let rss = rss2();
+    let atom = parse_fixture("atom.xml", "https://atom.example.org/feed.xml");
+
+    assert_eq!(rss.items[0].summary.as_deref(), Some("Short summary"));
+    assert_eq!(atom.items[0].summary.as_deref(), Some("Atom body"));
+}

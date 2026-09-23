@@ -43,6 +43,7 @@ pub struct ItemSummary {
     pub url: Option<Url>,
     pub title: Option<String>,
     pub author: Option<String>,
+    pub summary: Option<String>,
     pub published_at: DateTime<Utc>,
     pub read_at: Option<DateTime<Utc>>,
     pub starred_at: Option<DateTime<Utc>>,
@@ -64,6 +65,7 @@ struct SummaryRow {
     url: Option<String>,
     title: Option<String>,
     author: Option<String>,
+    summary: Option<String>,
     published_at: i64,
     read_at: Option<i64>,
     starred_at: Option<i64>,
@@ -78,6 +80,7 @@ impl From<SummaryRow> for ItemSummary {
             url: parse_optional_url(row.url),
             title: row.title,
             author: row.author,
+            summary: row.summary,
             published_at: from_ts(row.published_at),
             read_at: row.read_at.map(from_ts),
             starred_at: row.starred_at.map(from_ts),
@@ -109,7 +112,7 @@ impl Db {
         let limit = query.limit as usize;
         let mut sql = QueryBuilder::new(
             "SELECT items.id, items.feed_id, COALESCE(feeds.custom_title, feeds.title) AS feed_title,
-                    items.url, items.title, items.author, items.published_at, items.read_at, items.starred_at
+                    items.url, items.title, items.author, items.summary, items.published_at, items.read_at, items.starred_at
              FROM items JOIN feeds ON feeds.id = items.feed_id
              WHERE 1 = 1",
         );
@@ -151,7 +154,7 @@ impl Db {
         let row = sqlx::query!(
             r#"SELECT items.id AS "id: ItemId", items.feed_id AS "feed_id: FeedId",
                       COALESCE(feeds.custom_title, feeds.title) AS "feed_title!: String",
-                      items.url, items.title, items.author, items.published_at, items.read_at, items.starred_at,
+                      items.url, items.title, items.author, items.summary, items.published_at, items.read_at, items.starred_at,
                       items.content_html
                FROM items JOIN feeds ON feeds.id = items.feed_id
                WHERE items.id = ?"#,
@@ -168,6 +171,7 @@ impl Db {
                 url: row.url,
                 title: row.title,
                 author: row.author,
+                summary: row.summary,
                 published_at: row.published_at,
                 read_at: row.read_at,
                 starred_at: row.starred_at,

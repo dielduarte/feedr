@@ -375,6 +375,7 @@ mod items {
 
         assert_eq!(body["items"].as_array().unwrap().len(), 4);
         assert_eq!(first["feed_title"], "Example Blog");
+        assert!(first["summary"].is_string());
         assert!(first["published_at"].is_string());
         assert_eq!(first["read_at"], Value::Null);
         assert_eq!(first.get("content_html"), None);
@@ -566,5 +567,41 @@ mod opml {
         let body = response.text().await.unwrap();
         assert!(body.contains(r#"text="Tech""#));
         assert!(body.contains(api.sites.join("a.xml").unwrap().as_str()));
+    }
+}
+
+mod web_app {
+    use super::*;
+
+    #[tokio::test]
+    async fn is_served_for_any_non_api_path_so_links_survive_a_reload() {
+        let api = start().await;
+
+        for path in ["", "unread", "feeds/3/items/9"] {
+            let response = api
+                .client
+                .get(api.base.join(path).unwrap())
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "/{path}");
+            assert!(
+                response.headers()["content-type"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("text/html"),
+                "/{path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_api_routes_stay_json_errors() {
+        let api = start().await;
+
+        let (status, body) = api.get("api/nope").await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(body["error"].is_string());
     }
 }

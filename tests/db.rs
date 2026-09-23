@@ -38,6 +38,7 @@ fn item(guid: &str, published_at: DateTime<Utc>) -> NewItem {
         title: Some(format!("Item {guid}")),
         author: None,
         content: Some(SanitizedHtml::clean(&format!("<p>{guid}</p>"), &base)),
+        summary: Some(format!("Summary of {guid}")),
         published_at,
     }
 }
@@ -780,4 +781,14 @@ mod polling {
 
         assert_eq!(t.db.next_due_at().await.unwrap(), Some(at(0)));
     }
+}
+
+#[tokio::test]
+async fn listed_items_carry_their_summary() {
+    let t = open().await;
+    feed_with_items(&t.db, "https://a.com/feed", vec![item("1", at(1))]).await;
+
+    let items = t.db.list_items(query(ItemScope::All)).await.unwrap().items;
+
+    assert_eq!(items[0].summary.as_deref(), Some("Summary of 1"));
 }

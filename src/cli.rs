@@ -33,6 +33,9 @@ pub enum Command {
     Serve {
         #[arg(long, default_value_t = 7777)]
         port: u16,
+        /// Open the web app in your browser
+        #[arg(long)]
+        open: bool,
     },
     /// Subscribe to a feed, or to a site that links to one
     Add {
@@ -57,7 +60,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("could not open {}", path.display()))?;
     match cli.command {
-        Command::Serve { port } => serve(db, port).await,
+        Command::Serve { port, open } => serve(db, port, open).await,
         Command::Add { url, folder } => add(db, &url, folder).await,
         Command::Refresh => refresh(db).await,
         Command::Ls => list(db).await,
@@ -90,14 +93,18 @@ fn plural(count: impl Into<u64>, word: &str) -> String {
     }
 }
 
-async fn serve(db: Db, port: u16) -> anyhow::Result<()> {
+async fn serve(db: Db, port: u16, open: bool) -> anyhow::Result<()> {
     let fetcher = Fetcher::new(DEFAULT_TIMEOUT);
     let cancel = CancellationToken::new();
     let (poller, poller_task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());
     let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port))
         .await
         .with_context(|| format!("could not listen on port {port}"))?;
-    println!("feedr is running at http://{}", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
+    println!("feedr is running at {url}");
+    if open && let Err(error) = open::that_detached(&url) {
+        tracing::warn!(%error, "could not open a browser");
+    }
 
     let app = api::router(AppState {
         db,

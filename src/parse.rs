@@ -5,6 +5,8 @@ use url::Url;
 
 use crate::sanitize::SanitizedHtml;
 
+const SUMMARY_CHARS: usize = 280;
+
 #[derive(Debug)]
 pub struct ParsedFeed {
     pub title: String,
@@ -19,6 +21,8 @@ pub struct NewItem {
     pub title: Option<String>,
     pub author: Option<String>,
     pub content: Option<SanitizedHtml>,
+    /// Plain-text preview for lists.
+    pub summary: Option<String>,
     pub published_at: DateTime<Utc>,
 }
 
@@ -54,14 +58,22 @@ pub fn parse(
 fn to_item(entry: Entry, feed_url: &Url, fetched_at: DateTime<Utc>) -> NewItem {
     let url = primary_link(&entry.links);
     let base = url.as_ref().unwrap_or(feed_url);
-    let raw_content = entry
+    let raw_summary = entry.summary.map(|s| s.content);
+    let content = entry
         .content
         .and_then(|c| c.body)
-        .or(entry.summary.map(|s| s.content));
+        .or_else(|| raw_summary.clone())
+        .map(|raw| SanitizedHtml::clean(&raw, base));
+    let summary = raw_summary
+        .map(|raw| SanitizedHtml::clean(&raw, base))
+        .as_ref()
+        .or(content.as_ref())
+        .and_then(|html| html.excerpt(SUMMARY_CHARS));
 
     NewItem {
         guid: entry.id,
-        content: raw_content.map(|raw| SanitizedHtml::clean(&raw, base)),
+        content,
+        summary,
         url,
         title: entry.title.map(|t| t.content),
         author: entry.authors.into_iter().next().map(|p| p.name),

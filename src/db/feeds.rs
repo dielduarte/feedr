@@ -295,10 +295,11 @@ async fn apply_fetch(
                 for item in &feed.items {
                     let url = item.url.as_ref().map(Url::as_str);
                     let content = item.content.as_ref().map(|c| c.as_str());
+                    let summary = item.summary.as_deref();
                     let published_at = ts(item.published_at);
                     inserted += sqlx::query!(
-                        "INSERT INTO items (feed_id, guid, url, title, author, content_html, published_at, fetched_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        "INSERT INTO items (feed_id, guid, url, title, author, content_html, summary, published_at, fetched_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                          ON CONFLICT (feed_id, guid) DO NOTHING",
                         id,
                         item.guid,
@@ -306,6 +307,7 @@ async fn apply_fetch(
                         item.title,
                         item.author,
                         content,
+                        summary,
                         published_at,
                         now
                     )
