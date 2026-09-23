@@ -75,18 +75,35 @@ impl Fetcher {
         validators: &Validators,
         now: DateTime<Utc>,
     ) -> FetchOutcome {
-        match self.try_fetch(url, validators, now).await {
-            Ok(outcome) => outcome,
-            Err(error) => FetchOutcome::Failed(error),
+        let page = match self.get(url, validators, now).await {
+            Ok(Some(page)) => page,
+            Ok(None) => return FetchOutcome::NotModified,
+            Err(error) => return FetchOutcome::Failed(error),
+        };
+        match parse(&page.body, &page.url, now) {
+            Ok(feed) => FetchOutcome::Updated {
+                feed,
+                validators: page.validators,
+            },
+            Err(error) => FetchOutcome::Failed(FetchError::Parse(error.to_string())),
         }
     }
 
-    async fn try_fetch(
+    /// Fetches any document, feed or not, so callers can inspect HTML pages.
+    pub async fn fetch_page(&self, url: &Url, now: DateTime<Utc>) -> Result<Page, FetchError> {
+        // Without validators a server has no reason to answer 304; treat it as a broken response.
+        self.get(url, &Validators::default(), now)
+            .await?
+            .ok_or(FetchError::Http(StatusCode::NOT_MODIFIED.as_u16()))
+    }
+
+    /// `None` means the server answered 304 Not Modified.
+    async fn get(
         &self,
         url: &Url,
         validators: &Validators,
         now: DateTime<Utc>,
-    ) -> Result<FetchOutcome, FetchError> {
+    ) -> Result<Option<Page>, FetchError> {
         let mut request = self.client.get(url.clone());
         if let Some(etag) = &validators.etag {
             request = request.header(header::IF_NONE_MATCH, etag);
@@ -98,7 +115,7 @@ impl Fetcher {
         let response = request.send().await?;
         let status = response.status();
         match status {
-            StatusCode::NOT_MODIFIED => return Ok(FetchOutcome::NotModified),
+            StatusCode::NOT_MODIFIED => return Ok(None),
             StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE => {
                 return Err(FetchError::RetryLater {
                     retry_after: retry_after(response.headers(), now),
@@ -108,16 +125,22 @@ impl Fetcher {
             _ => {}
         }
 
-        let validators = Validators {
-            etag: header_string(response.headers(), header::ETAG),
-            last_modified: header_string(response.headers(), header::LAST_MODIFIED),
-        };
-        let base = response.url().clone();
-        let body = response.bytes().await?;
-        let feed = parse(&body, &base, now).map_err(|e| FetchError::Parse(e.to_string()))?;
-
-        Ok(FetchOutcome::Updated { feed, validators })
+        Ok(Some(Page {
+            validators: Validators {
+                etag: header_string(response.headers(), header::ETAG),
+                last_modified: header_string(response.headers(), header::LAST_MODIFIED),
+            },
+            url: response.url().clone(),
+            body: response.bytes().await?.to_vec(),
+        }))
     }
+}
+
+pub struct Page {
+    /// Final URL after redirects.
+    pub url: Url,
+    pub validators: Validators,
+    pub body: Vec<u8>,
 }
 
 fn header_string(headers: &HeaderMap, name: header::HeaderName) -> Option<String> {

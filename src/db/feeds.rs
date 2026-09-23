@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use sqlx::SqliteConnection;
 use url::Url;
 
 use super::{Db, DbError, found, from_ts, place, ts};
@@ -82,24 +83,25 @@ pub(super) fn parse_optional_url(url: Option<String>) -> Option<Url> {
 impl Db {
     /// The new feed is due immediately so the poller picks it up on its next pass.
     pub async fn insert_feed(&self, new: NewFeed, now: DateTime<Utc>) -> Result<Feed, DbError> {
-        let url = new.url.as_str();
-        let site_url = new.site_url.as_ref().map(Url::as_str);
-        let now = ts(now);
-        sqlx::query_as!(
-            FeedRow,
-            r#"INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at)
-               VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5)
-               RETURNING id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
-                         custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error"#,
-            new.folder,
-            url,
-            site_url,
-            new.title,
-            now
-        )
-        .fetch_one(&self.pool)
-        .await?
-        .try_into()
+        insert_feed(&mut *self.pool.acquire().await?, &new, now).await
+    }
+
+    /// Stores a feed together with its first fetch, so a subscription never exists without items.
+    /// Returns the feed id and how many items were stored.
+    pub async fn subscribe(
+        &self,
+        new: NewFeed,
+        feed: &ParsedFeed,
+        validators: Validators,
+        now: DateTime<Utc>,
+        next_fetch_at: DateTime<Utc>,
+    ) -> Result<(FeedId, u64), DbError> {
+        let mut tx = self.pool.begin().await?;
+        let id = insert_feed(&mut tx, &new, now).await?.id;
+        let record = FetchRecord::Updated { feed, validators };
+        let inserted = apply_fetch(&mut tx, id, record, now, next_fetch_at).await?;
+        tx.commit().await?;
+        Ok((id, inserted))
     }
 
     pub async fn feeds_due(&self, now: DateTime<Utc>) -> Result<Vec<Feed>, DbError> {
@@ -176,18 +178,56 @@ impl Db {
         next_fetch_at: DateTime<Utc>,
     ) -> Result<u64, DbError> {
         let mut tx = self.pool.begin().await?;
-        let now = ts(now);
-        let next_fetch_at = ts(next_fetch_at);
-        let mut inserted = 0;
+        let inserted = apply_fetch(&mut tx, id, record, now, next_fetch_at).await?;
+        tx.commit().await?;
+        Ok(inserted)
+    }
+}
 
-        let updated = match record {
+async fn insert_feed(
+    conn: &mut SqliteConnection,
+    new: &NewFeed,
+    now: DateTime<Utc>,
+) -> Result<Feed, DbError> {
+    let url = new.url.as_str();
+    let site_url = new.site_url.as_ref().map(Url::as_str);
+    let now = ts(now);
+    sqlx::query_as!(
+        FeedRow,
+        r#"INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at)
+           VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5)
+           RETURNING id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+                     custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error"#,
+        new.folder,
+        url,
+        site_url,
+        new.title,
+        now
+    )
+    .fetch_one(conn)
+    .await?
+    .try_into()
+}
+
+async fn apply_fetch(
+    conn: &mut SqliteConnection,
+    id: FeedId,
+    record: FetchRecord<'_>,
+    now: DateTime<Utc>,
+    next_fetch_at: DateTime<Utc>,
+) -> Result<u64, DbError> {
+    let now = ts(now);
+    let next_fetch_at = ts(next_fetch_at);
+    let mut inserted = 0;
+
+    let updated = match record {
             FetchRecord::NotModified => {
                 sqlx::query!(
                     "UPDATE feeds SET error_count = 0, last_error = NULL, next_fetch_at = ? WHERE id = ?",
                     next_fetch_at,
                     id
                 )
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?
             }
             FetchRecord::Failed { error } => {
@@ -197,7 +237,7 @@ impl Db {
                     next_fetch_at,
                     id
                 )
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?
             }
             FetchRecord::Updated { feed, validators } => {
@@ -214,7 +254,7 @@ impl Db {
                     next_fetch_at,
                     id
                 )
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?;
 
                 for item in &feed.items {
@@ -234,7 +274,7 @@ impl Db {
                         published_at,
                         now
                     )
-                    .execute(&mut *tx)
+                    .execute(&mut *conn)
                     .await?
                     .rows_affected();
                 }
@@ -242,8 +282,6 @@ impl Db {
             }
         };
 
-        found(updated)?;
-        tx.commit().await?;
-        Ok(inserted)
-    }
+    found(updated)?;
+    Ok(inserted)
 }
