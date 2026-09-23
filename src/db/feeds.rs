@@ -37,6 +37,9 @@ pub enum FetchRecord<'a> {
     Failed {
         error: String,
     },
+    /// We couldn't tell whether the feed is healthy (e.g. the machine is offline): try again
+    /// later without touching its error state.
+    Postponed,
 }
 
 struct FeedRow {
@@ -169,6 +172,25 @@ impl Db {
         )
     }
 
+    /// Feeds whose last fetch succeeded, most recently checked first.
+    pub async fn healthy_feeds(&self, limit: u32) -> Result<Vec<Feed>, DbError> {
+        sqlx::query_as!(
+            FeedRow,
+            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+                      custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error
+               FROM feeds
+               WHERE error_count = 0
+               ORDER BY next_fetch_at DESC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(Feed::try_from)
+        .collect()
+    }
+
     /// Returns how many previously unseen items were stored.
     pub async fn record_fetch(
         &self,
@@ -230,7 +252,16 @@ async fn apply_fetch(
                 .execute(&mut *conn)
                 .await?
             }
-            FetchRecord::Failed { error } => {
+            FetchRecord::Postponed => {
+            sqlx::query!(
+                "UPDATE feeds SET next_fetch_at = ? WHERE id = ?",
+                next_fetch_at,
+                id
+            )
+            .execute(&mut *conn)
+            .await?
+        }
+        FetchRecord::Failed { error } => {
                 sqlx::query!(
                     "UPDATE feeds SET error_count = error_count + 1, last_error = ?, next_fetch_at = ? WHERE id = ?",
                     error,

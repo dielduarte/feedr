@@ -1,6 +1,7 @@
 mod feeds;
 mod folders;
 mod items;
+mod polling;
 mod sidebar;
 
 use std::path::Path;

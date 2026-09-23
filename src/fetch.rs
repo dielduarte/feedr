@@ -9,19 +9,28 @@ use url::Url;
 use crate::model::Validators;
 use crate::parse::{ParsedFeed, parse};
 
+/// Real feeds are well under this; the cap protects against endless or runaway responses.
+const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
+const MAX_REDIRECTS: usize = 10;
+
 const USER_AGENT: &str = concat!(
     "feedr/",
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/dielduarte/feedr)"
 );
 
-pub enum FetchOutcome {
+#[expect(
+    clippy::large_enum_variant,
+    reason = "short-lived and moved once; boxing would only add an allocation"
+)]
+pub enum Fetched {
     NotModified,
     Updated {
         feed: ParsedFeed,
         validators: Validators,
+        /// Set when every redirect on the way was permanent, so the stored URL should change.
+        moved_to: Option<Url>,
     },
-    Failed(FetchError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -34,8 +43,19 @@ pub enum FetchError {
     RetryLater { retry_after: Option<Duration> },
     #[error("server responded with {0}")]
     Http(u16),
+    #[error("too many redirects")]
+    TooManyRedirects,
+    #[error("response is larger than {} MB", MAX_BODY_BYTES / 1024 / 1024)]
+    TooLarge,
     #[error("{0}")]
     Parse(String),
+}
+
+impl FetchError {
+    /// Whether a server answered at all, as opposed to the request never getting through.
+    pub fn reached_server(&self) -> bool {
+        !matches!(self, Self::Timeout | Self::Network(_))
+    }
 }
 
 impl From<reqwest::Error> for FetchError {
@@ -55,6 +75,7 @@ impl From<reqwest::Error> for FetchError {
     }
 }
 
+#[derive(Clone)]
 pub struct Fetcher {
     client: reqwest::Client,
 }
@@ -64,6 +85,8 @@ impl Fetcher {
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .timeout(timeout)
+            // Followed by hand so we can tell permanent moves from temporary ones.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("HTTP client configuration is static and valid");
         Self { client }
@@ -74,18 +97,26 @@ impl Fetcher {
         url: &Url,
         validators: &Validators,
         now: DateTime<Utc>,
-    ) -> FetchOutcome {
-        let page = match self.get(url, validators, now).await {
-            Ok(Some(page)) => page,
-            Ok(None) => return FetchOutcome::NotModified,
-            Err(error) => return FetchOutcome::Failed(error),
+    ) -> Result<Fetched, FetchError> {
+        let Some(page) = self.get(url, validators, now).await? else {
+            return Ok(Fetched::NotModified);
         };
-        match parse(&page.body, &page.url, now) {
-            Ok(feed) => FetchOutcome::Updated {
+        let Page {
+            url,
+            validators,
+            body,
+            moved_to,
+        } = page;
+        // Parsing and sanitizing is CPU-bound; keep it off the async workers.
+        let parsed = tokio::task::spawn_blocking(move || parse(&body, &url, now)).await;
+        match parsed {
+            Ok(Ok(feed)) => Ok(Fetched::Updated {
                 feed,
-                validators: page.validators,
-            },
-            Err(error) => FetchOutcome::Failed(FetchError::Parse(error.to_string())),
+                validators,
+                moved_to,
+            }),
+            Ok(Err(error)) => Err(FetchError::Parse(error.to_string())),
+            Err(panic) => Err(FetchError::Parse(panic.to_string())),
         }
     }
 
@@ -104,35 +135,75 @@ impl Fetcher {
         validators: &Validators,
         now: DateTime<Utc>,
     ) -> Result<Option<Page>, FetchError> {
-        let mut request = self.client.get(url.clone());
-        if let Some(etag) = &validators.etag {
-            request = request.header(header::IF_NONE_MATCH, etag);
-        }
-        if let Some(last_modified) = &validators.last_modified {
-            request = request.header(header::IF_MODIFIED_SINCE, last_modified);
-        }
+        let mut current = url.clone();
+        let mut all_permanent = true;
 
-        let response = request.send().await?;
-        let status = response.status();
-        match status {
-            StatusCode::NOT_MODIFIED => return Ok(None),
-            StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE => {
-                return Err(FetchError::RetryLater {
-                    retry_after: retry_after(response.headers(), now),
-                });
+        for hops in 0..=MAX_REDIRECTS {
+            let mut request = self.client.get(current.clone());
+            if let Some(etag) = &validators.etag {
+                request = request.header(header::IF_NONE_MATCH, etag);
             }
-            _ if !status.is_success() => return Err(FetchError::Http(status.as_u16())),
-            _ => {}
-        }
+            if let Some(last_modified) = &validators.last_modified {
+                request = request.header(header::IF_MODIFIED_SINCE, last_modified);
+            }
 
-        Ok(Some(Page {
-            validators: Validators {
+            let mut response = request.send().await?;
+            let status = response.status();
+            match status {
+                StatusCode::MOVED_PERMANENTLY
+                | StatusCode::FOUND
+                | StatusCode::SEE_OTHER
+                | StatusCode::TEMPORARY_REDIRECT
+                | StatusCode::PERMANENT_REDIRECT => {
+                    let location = response
+                        .headers()
+                        .get(header::LOCATION)
+                        .and_then(|l| l.to_str().ok())
+                        .and_then(|l| current.join(l).ok())
+                        .ok_or(FetchError::Http(status.as_u16()))?;
+                    all_permanent &= matches!(
+                        status,
+                        StatusCode::MOVED_PERMANENTLY | StatusCode::PERMANENT_REDIRECT
+                    );
+                    current = location;
+                    continue;
+                }
+                StatusCode::NOT_MODIFIED => return Ok(None),
+                StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE => {
+                    return Err(FetchError::RetryLater {
+                        retry_after: retry_after(response.headers(), now),
+                    });
+                }
+                _ if !status.is_success() => return Err(FetchError::Http(status.as_u16())),
+                _ => {}
+            }
+
+            if response
+                .content_length()
+                .is_some_and(|len| len > MAX_BODY_BYTES as u64)
+            {
+                return Err(FetchError::TooLarge);
+            }
+            let validators = Validators {
                 etag: header_string(response.headers(), header::ETAG),
                 last_modified: header_string(response.headers(), header::LAST_MODIFIED),
-            },
-            url: response.url().clone(),
-            body: response.bytes().await?.to_vec(),
-        }))
+            };
+            let mut body = Vec::new();
+            while let Some(chunk) = response.chunk().await? {
+                if body.len() + chunk.len() > MAX_BODY_BYTES {
+                    return Err(FetchError::TooLarge);
+                }
+                body.extend_from_slice(&chunk);
+            }
+
+            return Ok(Some(Page {
+                moved_to: (hops > 0 && all_permanent).then(|| current.clone()),
+                url: current,
+                validators,
+                body,
+            }));
+        }
+        Err(FetchError::TooManyRedirects)
     }
 }
 
@@ -141,6 +212,7 @@ pub struct Page {
     pub url: Url,
     pub validators: Validators,
     pub body: Vec<u8>,
+    pub moved_to: Option<Url>,
 }
 
 fn header_string(headers: &HeaderMap, name: header::HeaderName) -> Option<String> {

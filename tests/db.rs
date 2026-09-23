@@ -639,3 +639,145 @@ mod items {
         ));
     }
 }
+
+mod polling {
+    use super::*;
+    use feedr::model::FeedScope;
+
+    #[tokio::test]
+    async fn recent_publish_times_are_newest_first_and_limited() {
+        let t = open().await;
+        let feed = feed_with_items(
+            &t.db,
+            "https://a.com/feed",
+            vec![item("1", at(1)), item("3", at(3)), item("2", at(2))],
+        )
+        .await;
+
+        assert_eq!(
+            t.db.recent_publish_times(feed, 2).await.unwrap(),
+            [at(3), at(2)]
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_scopes_make_feeds_due_now() {
+        let t = open().await;
+        let folder = t.db.create_folder("Tech").await.unwrap();
+        let a = feed_with_items(&t.db, "https://a.com/feed", vec![]).await;
+        let b = feed_with_items(&t.db, "https://b.com/feed", vec![]).await;
+        feed_with_items(&t.db, "https://c.com/feed", vec![]).await;
+        t.db.move_feed(b, Some(folder.id), 0).await.unwrap();
+        let due_ids = |due: Vec<feedr::db::Feed>| due.into_iter().map(|f| f.id).collect::<Vec<_>>();
+
+        assert_eq!(t.db.mark_due(FeedScope::Feed(a), at(0)).await.unwrap(), 1);
+        assert_eq!(due_ids(t.db.feeds_due(at(0)).await.unwrap()), [a]);
+
+        assert_eq!(
+            t.db.mark_due(FeedScope::Folder(folder.id), at(0))
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(due_ids(t.db.feeds_due(at(0)).await.unwrap()).len(), 2);
+
+        assert_eq!(t.db.mark_due(FeedScope::All, at(0)).await.unwrap(), 3);
+        assert_eq!(t.db.feeds_due(at(0)).await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn postponing_keeps_the_error_state() {
+        let t = open().await;
+        let feed =
+            t.db.insert_feed(new_feed("https://a.com/feed"), at(0))
+                .await
+                .unwrap();
+        let failed = FetchRecord::Failed {
+            error: "boom".to_string(),
+        };
+        t.db.record_fetch(feed.id, failed, at(0), at(0))
+            .await
+            .unwrap();
+
+        t.db.record_fetch(feed.id, FetchRecord::Postponed, at(0), at(2))
+            .await
+            .unwrap();
+
+        assert!(t.db.feeds_due(at(1)).await.unwrap().is_empty());
+        let stored = &t.db.feeds_due(at(2)).await.unwrap()[0];
+        assert_eq!(stored.error_count, 1);
+        assert_eq!(stored.last_error.as_deref(), Some("boom"));
+    }
+
+    #[tokio::test]
+    async fn feeds_can_move_to_a_new_url() {
+        let t = open().await;
+        let feed =
+            t.db.insert_feed(new_feed("https://a.com/feed"), at(0))
+                .await
+                .unwrap();
+        t.db.insert_feed(new_feed("https://taken.com/feed"), at(0))
+            .await
+            .unwrap();
+
+        t.db.update_feed_url(feed.id, &Url::parse("https://new.a.com/feed").unwrap())
+            .await
+            .unwrap();
+
+        let urls: Vec<_> =
+            t.db.feeds_due(at(0))
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|f| f.url.to_string())
+                .collect();
+        assert!(urls.contains(&"https://new.a.com/feed".to_string()));
+        assert!(matches!(
+            t.db.update_feed_url(feed.id, &Url::parse("https://taken.com/feed").unwrap())
+                .await,
+            Err(DbError::AlreadyExists)
+        ));
+    }
+
+    #[tokio::test]
+    async fn healthy_feeds_exclude_failing_ones() {
+        let t = open().await;
+        let healthy = feed_with_items(&t.db, "https://a.com/feed", vec![]).await;
+        let failing = feed_with_items(&t.db, "https://b.com/feed", vec![]).await;
+        let failed = FetchRecord::Failed {
+            error: "down".to_string(),
+        };
+        t.db.record_fetch(failing, failed, at(0), at(1))
+            .await
+            .unwrap();
+
+        let ids: Vec<_> =
+            t.db.healthy_feeds(10)
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|f| f.id)
+                .collect();
+
+        assert_eq!(ids, [healthy]);
+    }
+
+    #[tokio::test]
+    async fn next_due_is_the_earliest_scheduled_fetch() {
+        let t = open().await;
+        assert_eq!(t.db.next_due_at().await.unwrap(), None);
+
+        let a =
+            t.db.insert_feed(new_feed("https://a.com/feed"), at(0))
+                .await
+                .unwrap();
+        t.db.insert_feed(new_feed("https://b.com/feed"), at(0))
+            .await
+            .unwrap();
+        t.db.record_fetch(a.id, FetchRecord::NotModified, at(0), at(5))
+            .await
+            .unwrap();
+
+        assert_eq!(t.db.next_due_at().await.unwrap(), Some(at(0)));
+    }
+}

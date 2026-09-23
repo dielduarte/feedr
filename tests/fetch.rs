@@ -5,7 +5,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::fetch::{FetchError, FetchOutcome, Fetcher};
+use feedr::fetch::{FetchError, Fetched, Fetcher};
 use feedr::model::Validators;
 use url::Url;
 
@@ -96,7 +96,21 @@ async fn serve() -> Url {
             "/page.html",
             get(|| async { "<html><body>not a feed</body></html>" }),
         )
-        .route("/slow", get(slow));
+        .route("/slow", get(slow))
+        .route(
+            "/temporary",
+            get(|| async { Redirect::temporary("/feed.xml") }),
+        )
+        .route(
+            "/moved-twice",
+            get(|| async { Redirect::permanent("/moved") }),
+        )
+        .route(
+            "/moved-then-temporary",
+            get(|| async { Redirect::permanent("/temporary") }),
+        )
+        .route("/loop", get(|| async { Redirect::temporary("/loop") }))
+        .route("/huge", get(|| async { vec![b' '; 11 * 1024 * 1024] }));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -104,7 +118,7 @@ async fn serve() -> Url {
     Url::parse(&format!("http://{addr}/")).unwrap()
 }
 
-async fn fetch(url: Url, validators: Validators) -> FetchOutcome {
+async fn fetch(url: Url, validators: Validators) -> Result<Fetched, FetchError> {
     Fetcher::new(Duration::from_secs(5))
         .fetch(&url, &validators, now())
         .await
@@ -114,8 +128,9 @@ async fn fetch(url: Url, validators: Validators) -> FetchOutcome {
 async fn returns_the_parsed_feed_and_its_validators() {
     let base = serve().await;
 
-    let FetchOutcome::Updated { feed, validators } =
-        fetch(base.join("feed.xml").unwrap(), Validators::default()).await
+    let Ok(Fetched::Updated {
+        feed, validators, ..
+    }) = fetch(base.join("feed.xml").unwrap(), Validators::default()).await
     else {
         panic!("expected an updated feed");
     };
@@ -136,7 +151,7 @@ async fn is_not_modified_when_the_etag_matches() {
 
     let outcome = fetch(base.join("feed.xml").unwrap(), validators).await;
 
-    assert!(matches!(outcome, FetchOutcome::NotModified));
+    assert!(matches!(outcome, Ok(Fetched::NotModified)));
 }
 
 #[tokio::test]
@@ -149,16 +164,52 @@ async fn is_not_modified_when_last_modified_matches() {
 
     let outcome = fetch(base.join("last-modified.xml").unwrap(), validators).await;
 
-    assert!(matches!(outcome, FetchOutcome::NotModified));
+    assert!(matches!(outcome, Ok(Fetched::NotModified)));
+}
+
+async fn moved_to(path: &str) -> Option<Url> {
+    let base = serve().await;
+    match fetch(base.join(path).unwrap(), Validators::default()).await {
+        Ok(Fetched::Updated { moved_to, .. }) => moved_to.inspect(|url| {
+            assert_eq!(url.path(), "/feed.xml");
+        }),
+        _ => panic!("expected {path} to resolve to a feed"),
+    }
 }
 
 #[tokio::test]
-async fn follows_redirects() {
+async fn reports_where_a_permanently_moved_feed_lives() {
+    assert!(moved_to("moved").await.is_some());
+    assert!(moved_to("moved-twice").await.is_some());
+}
+
+#[tokio::test]
+async fn follows_temporary_redirects_without_reporting_a_move() {
+    assert!(moved_to("temporary").await.is_none());
+    assert!(moved_to("moved-then-temporary").await.is_none());
+}
+
+#[tokio::test]
+async fn is_not_moved_without_redirects() {
+    assert!(moved_to("feed.xml").await.is_none());
+}
+
+#[tokio::test]
+async fn gives_up_on_redirect_loops() {
     let base = serve().await;
 
-    let outcome = fetch(base.join("moved").unwrap(), Validators::default()).await;
+    let outcome = fetch(base.join("loop").unwrap(), Validators::default()).await;
 
-    assert!(matches!(outcome, FetchOutcome::Updated { .. }));
+    assert!(matches!(outcome, Err(FetchError::TooManyRedirects)));
+}
+
+#[tokio::test]
+async fn refuses_oversized_responses() {
+    let base = serve().await;
+
+    let outcome = fetch(base.join("huge").unwrap(), Validators::default()).await;
+
+    assert!(matches!(outcome, Err(FetchError::TooLarge)));
 }
 
 #[tokio::test]
@@ -167,7 +218,7 @@ async fn identifies_itself_with_a_user_agent() {
 
     let outcome = fetch(base.join("identified.xml").unwrap(), Validators::default()).await;
 
-    assert!(matches!(outcome, FetchOutcome::Updated { .. }));
+    assert!(matches!(outcome, Ok(Fetched::Updated { .. })));
 }
 
 #[tokio::test]
@@ -182,7 +233,7 @@ async fn reports_rate_limits_with_retry_after_in_seconds() {
 
     assert!(matches!(
         outcome,
-        FetchOutcome::Failed(FetchError::RetryLater { retry_after: Some(d) }) if d == Duration::from_secs(120)
+        Err(FetchError::RetryLater { retry_after: Some(d) }) if d == Duration::from_secs(120)
     ));
 }
 
@@ -198,7 +249,7 @@ async fn reports_unavailability_with_retry_after_as_a_date() {
 
     assert!(matches!(
         outcome,
-        FetchOutcome::Failed(FetchError::RetryLater { retry_after: Some(d) }) if d == Duration::from_secs(90)
+        Err(FetchError::RetryLater { retry_after: Some(d) }) if d == Duration::from_secs(90)
     ));
 }
 
@@ -214,7 +265,7 @@ async fn reports_rate_limits_without_retry_after() {
 
     assert!(matches!(
         outcome,
-        FetchOutcome::Failed(FetchError::RetryLater { retry_after: None })
+        Err(FetchError::RetryLater { retry_after: None })
     ));
 }
 
@@ -226,7 +277,7 @@ async fn reports_http_errors() {
 
     assert!(matches!(
         outcome,
-        FetchOutcome::Failed(FetchError::Http(status)) if status == 404
+        Err(FetchError::Http(status)) if status == 404
     ));
 }
 
@@ -236,10 +287,7 @@ async fn reports_content_that_is_not_a_feed() {
 
     let outcome = fetch(base.join("page.html").unwrap(), Validators::default()).await;
 
-    assert!(matches!(
-        outcome,
-        FetchOutcome::Failed(FetchError::Parse(_))
-    ));
+    assert!(matches!(outcome, Err(FetchError::Parse(_))));
 }
 
 #[tokio::test]
@@ -250,7 +298,7 @@ async fn gives_up_on_slow_servers() {
         .fetch(&base.join("slow").unwrap(), &Validators::default(), now())
         .await;
 
-    assert!(matches!(outcome, FetchOutcome::Failed(FetchError::Timeout)));
+    assert!(matches!(outcome, Err(FetchError::Timeout)));
 }
 
 #[tokio::test]
@@ -265,8 +313,5 @@ async fn reports_unreachable_hosts() {
     )
     .await;
 
-    assert!(matches!(
-        outcome,
-        FetchOutcome::Failed(FetchError::Network(_))
-    ));
+    assert!(matches!(outcome, Err(FetchError::Network(_))));
 }

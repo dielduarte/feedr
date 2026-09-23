@@ -3,7 +3,7 @@ use url::Url;
 
 use crate::db::{Db, DbError, NewFeed};
 use crate::discover::{COMMON_FEED_PATHS, feed_links};
-use crate::fetch::{FetchError, FetchOutcome, Fetcher};
+use crate::fetch::{FetchError, Fetched, Fetcher};
 use crate::model::{FeedId, FolderId, Validators};
 use crate::parse::{ParsedFeed, parse};
 use crate::schedule::POLL_INTERVAL;
@@ -60,10 +60,11 @@ pub async fn add_feed(
     }
 
     for candidate in candidates {
-        if let FetchOutcome::Updated {
+        if let Ok(Fetched::Updated {
             mut feed,
             validators,
-        } = fetcher.fetch(&candidate, &Validators::default(), now).await
+            ..
+        }) = fetcher.fetch(&candidate, &Validators::default(), now).await
         {
             feed.site_url.get_or_insert(page.url.clone());
             return subscribe(db, candidate, feed, validators, folder, now).await;

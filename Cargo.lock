@@ -665,11 +665,16 @@ dependencies = [
  "hex",
  "reqwest",
  "scraper",
+ "serde",
+ "serde_json",
  "sha2 0.11.0",
  "sqlx",
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
  "url",
 ]
 
@@ -2587,6 +2592,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
