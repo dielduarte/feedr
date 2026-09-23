@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Blog</title>
+    <link>https://example.com/</link>
+    <description>An example blog</description>
+    <item>
+      <title>First post</title>
+      <link>https://example.com/posts/1</link>
+      <guid isPermaLink="false">post-1</guid>
+      <author>jane@example.com (Jane)</author>
+      <pubDate>Tue, 22 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Short summary</description>
+      <content:encoded><![CDATA[<script>alert('xss')</script><p onclick="steal()">Hello <a href="/about">about</a> <img src="img.png"></p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Second post</title>
+      <link>https://example.com/posts/2</link>
+      <description>No guid and no date</description>
+    </item>
+    <item>
+      <title>Linkless note</title>
+      <description>No guid and no link</description>
+    </item>
+    <item>
+      <title>Another linkless note</title>
+      <description>Also no guid and no link</description>
+    </item>
+  </channel>
+</rss>

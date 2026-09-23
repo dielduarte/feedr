@@ -1,0 +1,13 @@
+[package]
+name = "feedr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ammonia = "4.2.0"
+chrono = "0.4.45"
+feed-rs = "2.4.0"
+hex = "0.4.3"
+sha2 = "0.11.0"
+thiserror = "2.0.21"
+url = "2.5.8"
