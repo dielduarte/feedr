@@ -26,7 +26,11 @@ pub struct NewItem {
 #[error("invalid feed: {0}")]
 pub struct ParseError(#[from] feed_rs::parser::ParseFeedError);
 
-pub fn parse(bytes: &[u8], feed_url: &Url, fetched_at: DateTime<Utc>) -> Result<ParsedFeed, ParseError> {
+pub fn parse(
+    bytes: &[u8],
+    feed_url: &Url,
+    fetched_at: DateTime<Utc>,
+) -> Result<ParsedFeed, ParseError> {
     let feed = feed_rs::parser::Builder::new()
         .base_uri(Some(feed_url.as_str()))
         .id_generator(stable_id)

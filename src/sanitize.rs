@@ -13,6 +13,11 @@ impl SanitizedHtml {
         Self(html)
     }
 
+    /// Content is cleaned before it is stored, so reading it back needs no second pass.
+    pub(crate) fn from_stored(html: String) -> Self {
+        Self(html)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

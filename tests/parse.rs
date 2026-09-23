@@ -3,7 +3,11 @@ use feedr::parse::{ParsedFeed, parse};
 use url::Url;
 
 fn fixture(name: &str) -> Vec<u8> {
-    std::fs::read(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    std::fs::read(format!(
+        "{}/tests/fixtures/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
 }
 
 fn fetched_at() -> DateTime<Utc> {
@@ -32,9 +36,15 @@ fn uses_the_feed_guid_when_present() {
     let item = &rss2().items[0];
 
     assert_eq!(item.guid, "post-1");
-    assert_eq!(item.url.as_ref().unwrap().as_str(), "https://example.com/posts/1");
+    assert_eq!(
+        item.url.as_ref().unwrap().as_str(),
+        "https://example.com/posts/1"
+    );
     assert_eq!(item.title.as_deref(), Some("First post"));
-    assert_eq!(item.published_at, Utc.with_ymd_and_hms(2026, 9, 22, 10, 0, 0).unwrap());
+    assert_eq!(
+        item.published_at,
+        Utc.with_ymd_and_hms(2026, 9, 22, 10, 0, 0).unwrap()
+    );
 }
 
 #[test]
@@ -58,8 +68,16 @@ fn strips_scripts_and_event_handlers() {
 fn resolves_relative_urls_against_the_item_link() {
     let content = rss2().items[0].content.clone().unwrap();
 
-    assert!(content.as_str().contains(r#"href="https://example.com/about""#));
-    assert!(content.as_str().contains(r#"src="https://example.com/posts/img.png""#));
+    assert!(
+        content
+            .as_str()
+            .contains(r#"href="https://example.com/about""#)
+    );
+    assert!(
+        content
+            .as_str()
+            .contains(r#"src="https://example.com/posts/img.png""#)
+    );
 }
 
 #[test]
@@ -90,7 +108,10 @@ fn parses_atom_using_updated_when_published_is_missing() {
     assert_eq!(feed.title, "Atom Example");
     assert_eq!(feed.site_url.unwrap().as_str(), "https://atom.example.org/");
     assert_eq!(item.guid, "urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a");
-    assert_eq!(item.published_at, Utc.with_ymd_and_hms(2026, 9, 20, 18, 30, 2).unwrap());
+    assert_eq!(
+        item.published_at,
+        Utc.with_ymd_and_hms(2026, 9, 20, 18, 30, 2).unwrap()
+    );
     assert_eq!(item.content.as_ref().unwrap().as_str(), "<p>Atom body</p>");
 }
 

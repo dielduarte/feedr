@@ -1,0 +1,87 @@
+use sqlx::Row;
+use url::Url;
+
+use super::feeds::parse_optional_url;
+use super::{Db, DbError, Folder};
+use crate::model::{FeedId, FolderId};
+
+#[derive(Debug, Clone)]
+pub struct Sidebar {
+    pub folders: Vec<SidebarFolder>,
+    pub uncategorized: Vec<SidebarFeed>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SidebarFolder {
+    pub folder: Folder,
+    pub feeds: Vec<SidebarFeed>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SidebarFeed {
+    pub id: FeedId,
+    pub title: String,
+    pub site_url: Option<Url>,
+    pub unread: u32,
+    pub last_error: Option<String>,
+}
+
+impl Sidebar {
+    pub fn total_unread(&self) -> u32 {
+        self.folders.iter().map(SidebarFolder::unread).sum::<u32>()
+            + self.uncategorized.iter().map(|f| f.unread).sum::<u32>()
+    }
+}
+
+impl SidebarFolder {
+    pub fn unread(&self) -> u32 {
+        self.feeds.iter().map(|f| f.unread).sum()
+    }
+}
+
+impl Db {
+    pub async fn sidebar(&self) -> Result<Sidebar, DbError> {
+        let rows = sqlx::query(
+            "SELECT id, folder_id, COALESCE(custom_title, title) AS title, site_url, last_error,
+                    (SELECT COUNT(*) FROM items WHERE items.feed_id = feeds.id AND read_at IS NULL) AS unread
+             FROM feeds
+             ORDER BY position, id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut folders: Vec<SidebarFolder> = self
+            .folders()
+            .await?
+            .into_iter()
+            .map(|folder| SidebarFolder {
+                folder,
+                feeds: Vec::new(),
+            })
+            .collect();
+        let mut uncategorized = Vec::new();
+
+        for row in rows {
+            let feed = SidebarFeed {
+                id: row.try_get("id")?,
+                title: row.try_get("title")?,
+                site_url: parse_optional_url(row.try_get("site_url")?),
+                unread: row.try_get("unread")?,
+                last_error: row.try_get("last_error")?,
+            };
+            match row.try_get::<Option<FolderId>, _>("folder_id")? {
+                Some(folder_id) => {
+                    if let Some(folder) = folders.iter_mut().find(|f| f.folder.id == folder_id) {
+                        folder.feeds.push(feed);
+                    }
+                }
+                None => uncategorized.push(feed),
+            }
+        }
+
+        Ok(Sidebar {
+            folders,
+            uncategorized,
+        })
+    }
+}
