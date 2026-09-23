@@ -1,4 +1,3 @@
-use sqlx::Row;
 use url::Url;
 
 use super::feeds::parse_optional_url;
@@ -41,11 +40,12 @@ impl SidebarFolder {
 
 impl Db {
     pub async fn sidebar(&self) -> Result<Sidebar, DbError> {
-        let rows = sqlx::query(
-            "SELECT id, folder_id, COALESCE(custom_title, title) AS title, site_url, last_error,
-                    (SELECT COUNT(*) FROM items WHERE items.feed_id = feeds.id AND read_at IS NULL) AS unread
-             FROM feeds
-             ORDER BY position, id",
+        let rows = sqlx::query!(
+            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId",
+                      COALESCE(custom_title, title) AS "title!: String", site_url, last_error,
+                      (SELECT COUNT(*) FROM items WHERE items.feed_id = feeds.id AND read_at IS NULL) AS "unread!: u32"
+               FROM feeds
+               ORDER BY position, id"#
         )
         .fetch_all(&self.pool)
         .await?;
@@ -63,13 +63,13 @@ impl Db {
 
         for row in rows {
             let feed = SidebarFeed {
-                id: row.try_get("id")?,
-                title: row.try_get("title")?,
-                site_url: parse_optional_url(row.try_get("site_url")?),
-                unread: row.try_get("unread")?,
-                last_error: row.try_get("last_error")?,
+                id: row.id,
+                title: row.title,
+                site_url: parse_optional_url(row.site_url),
+                unread: row.unread,
+                last_error: row.last_error,
             };
-            match row.try_get::<Option<FolderId>, _>("folder_id")? {
+            match row.folder_id {
                 Some(folder_id) => {
                     if let Some(folder) = folders.iter_mut().find(|f| f.folder.id == folder_id) {
                         folder.feeds.push(feed);

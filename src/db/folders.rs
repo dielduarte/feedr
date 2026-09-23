@@ -1,7 +1,7 @@
 use super::{Db, DbError, found, place};
 use crate::model::FolderId;
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Folder {
     pub id: FolderId,
     pub name: String,
@@ -9,12 +9,12 @@ pub struct Folder {
 
 impl Db {
     pub async fn create_folder(&self, name: &str) -> Result<Folder, DbError> {
-        let id = sqlx::query_scalar(
-            "INSERT INTO folders (name, position)
-             VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))
-             RETURNING id",
+        let id = sqlx::query_scalar!(
+            r#"INSERT INTO folders (name, position)
+               VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))
+               RETURNING id AS "id: FolderId""#,
+            name
         )
-        .bind(name)
         .fetch_one(&self.pool)
         .await?;
         Ok(Folder {
@@ -25,9 +25,7 @@ impl Db {
 
     pub async fn rename_folder(&self, id: FolderId, name: &str) -> Result<(), DbError> {
         found(
-            sqlx::query("UPDATE folders SET name = ? WHERE id = ?")
-                .bind(name)
-                .bind(id)
+            sqlx::query!("UPDATE folders SET name = ? WHERE id = ?", name, id)
                 .execute(&self.pool)
                 .await?,
         )
@@ -35,19 +33,23 @@ impl Db {
 
     pub async fn move_folder(&self, id: FolderId, index: usize) -> Result<(), DbError> {
         let mut tx = self.pool.begin().await?;
-        let siblings: Vec<FolderId> =
-            sqlx::query_scalar("SELECT id FROM folders ORDER BY position, id")
-                .fetch_all(&mut *tx)
-                .await?;
+        let siblings = sqlx::query_scalar!(
+            r#"SELECT id AS "id: FolderId" FROM folders ORDER BY position, id"#
+        )
+        .fetch_all(&mut *tx)
+        .await?;
         if !siblings.contains(&id) {
             return Err(DbError::NotFound);
         }
         for (position, folder) in place(siblings, id, index).into_iter().enumerate() {
-            sqlx::query("UPDATE folders SET position = ? WHERE id = ?")
-                .bind(position as i64)
-                .bind(folder)
-                .execute(&mut *tx)
-                .await?;
+            let position = position as i64;
+            sqlx::query!(
+                "UPDATE folders SET position = ? WHERE id = ?",
+                position,
+                folder
+            )
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
         Ok(())
@@ -55,18 +57,18 @@ impl Db {
 
     pub async fn delete_folder(&self, id: FolderId) -> Result<(), DbError> {
         found(
-            sqlx::query("DELETE FROM folders WHERE id = ?")
-                .bind(id)
+            sqlx::query!("DELETE FROM folders WHERE id = ?", id)
                 .execute(&self.pool)
                 .await?,
         )
     }
 
     pub(super) async fn folders(&self) -> Result<Vec<Folder>, DbError> {
-        Ok(
-            sqlx::query_as("SELECT id, name FROM folders ORDER BY position, id")
-                .fetch_all(&self.pool)
-                .await?,
+        Ok(sqlx::query_as!(
+            Folder,
+            r#"SELECT id AS "id: FolderId", name FROM folders ORDER BY position, id"#
         )
+        .fetch_all(&self.pool)
+        .await?)
     }
 }

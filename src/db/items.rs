@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{FromRow, QueryBuilder, Row, Sqlite};
+use sqlx::{QueryBuilder, Sqlite};
 use url::Url;
 
 use super::feeds::parse_optional_url;
@@ -55,37 +54,32 @@ pub struct Item {
     pub content: Option<SanitizedHtml>,
 }
 
-macro_rules! summary_select {
-    () => {
-        "SELECT items.id, items.feed_id, COALESCE(feeds.custom_title, feeds.title) AS feed_title,
-                items.url, items.title, items.author, items.published_at, items.read_at, items.starred_at"
-    };
+#[derive(sqlx::FromRow)]
+struct SummaryRow {
+    id: ItemId,
+    feed_id: FeedId,
+    feed_title: String,
+    url: Option<String>,
+    title: Option<String>,
+    author: Option<String>,
+    published_at: i64,
+    read_at: Option<i64>,
+    starred_at: Option<i64>,
 }
 
-impl FromRow<'_, SqliteRow> for ItemSummary {
-    fn from_row(row: &SqliteRow) -> sqlx::Result<Self> {
-        Ok(Self {
-            id: row.try_get("id")?,
-            feed_id: row.try_get("feed_id")?,
-            feed_title: row.try_get("feed_title")?,
-            url: parse_optional_url(row.try_get("url")?),
-            title: row.try_get("title")?,
-            author: row.try_get("author")?,
-            published_at: from_ts(row.try_get("published_at")?),
-            read_at: row.try_get::<Option<i64>, _>("read_at")?.map(from_ts),
-            starred_at: row.try_get::<Option<i64>, _>("starred_at")?.map(from_ts),
-        })
-    }
-}
-
-impl FromRow<'_, SqliteRow> for Item {
-    fn from_row(row: &SqliteRow) -> sqlx::Result<Self> {
-        Ok(Self {
-            summary: ItemSummary::from_row(row)?,
-            content: row
-                .try_get::<Option<String>, _>("content_html")?
-                .map(SanitizedHtml::from_stored),
-        })
+impl From<SummaryRow> for ItemSummary {
+    fn from(row: SummaryRow) -> Self {
+        Self {
+            id: row.id,
+            feed_id: row.feed_id,
+            feed_title: row.feed_title,
+            url: parse_optional_url(row.url),
+            title: row.title,
+            author: row.author,
+            published_at: from_ts(row.published_at),
+            read_at: row.read_at.map(from_ts),
+            starred_at: row.starred_at.map(from_ts),
+        }
     }
 }
 
@@ -111,10 +105,12 @@ fn push_scope(query: &mut QueryBuilder<Sqlite>, scope: ItemScope) {
 impl Db {
     pub async fn list_items(&self, query: ItemQuery) -> Result<Page, DbError> {
         let limit = query.limit as usize;
-        let mut sql = QueryBuilder::new(concat!(
-            summary_select!(),
-            " FROM items JOIN feeds ON feeds.id = items.feed_id WHERE 1 = 1"
-        ));
+        let mut sql = QueryBuilder::new(
+            "SELECT items.id, items.feed_id, COALESCE(feeds.custom_title, feeds.title) AS feed_title,
+                    items.url, items.title, items.author, items.published_at, items.read_at, items.starred_at
+             FROM items JOIN feeds ON feeds.id = items.feed_id
+             WHERE 1 = 1",
+        );
         push_scope(&mut sql, query.scope);
         if query.unread_only {
             sql.push(" AND items.read_at IS NULL");
@@ -130,7 +126,13 @@ impl Db {
         sql.push(" ORDER BY items.published_at DESC, items.id DESC LIMIT ")
             .push_bind(limit as i64 + 1);
 
-        let mut items: Vec<ItemSummary> = sql.build_query_as().fetch_all(&self.pool).await?;
+        let mut items: Vec<ItemSummary> = sql
+            .build_query_as::<SummaryRow>()
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(ItemSummary::from)
+            .collect();
         let next = if items.len() > limit {
             items.truncate(limit);
             items.last().map(|i| Cursor {
@@ -144,22 +146,42 @@ impl Db {
     }
 
     pub async fn get_item(&self, id: ItemId) -> Result<Item, DbError> {
-        Ok(sqlx::query_as(concat!(
-            summary_select!(),
-            ", items.content_html FROM items JOIN feeds ON feeds.id = items.feed_id WHERE items.id = ?"
-        ))
-        .bind(id)
+        let row = sqlx::query!(
+            r#"SELECT items.id AS "id: ItemId", items.feed_id AS "feed_id: FeedId",
+                      COALESCE(feeds.custom_title, feeds.title) AS "feed_title!: String",
+                      items.url, items.title, items.author, items.published_at, items.read_at, items.starred_at,
+                      items.content_html
+               FROM items JOIN feeds ON feeds.id = items.feed_id
+               WHERE items.id = ?"#,
+            id
+        )
         .fetch_one(&self.pool)
-        .await?)
+        .await?;
+
+        Ok(Item {
+            summary: SummaryRow {
+                id: row.id,
+                feed_id: row.feed_id,
+                feed_title: row.feed_title,
+                url: row.url,
+                title: row.title,
+                author: row.author,
+                published_at: row.published_at,
+                read_at: row.read_at,
+                starred_at: row.starred_at,
+            }
+            .into(),
+            content: row.content_html.map(SanitizedHtml::from_stored),
+        })
     }
 
     pub async fn set_read(&self, id: ItemId, read: bool) -> Result<(), DbError> {
         found(
-            sqlx::query(
+            sqlx::query!(
                 "UPDATE items SET read_at = CASE WHEN ? THEN COALESCE(read_at, unixepoch()) END WHERE id = ?",
+                read,
+                id
             )
-            .bind(read)
-            .bind(id)
             .execute(&self.pool)
             .await?,
         )
@@ -167,11 +189,11 @@ impl Db {
 
     pub async fn set_starred(&self, id: ItemId, starred: bool) -> Result<(), DbError> {
         found(
-            sqlx::query(
+            sqlx::query!(
                 "UPDATE items SET starred_at = CASE WHEN ? THEN COALESCE(starred_at, unixepoch()) END WHERE id = ?",
+                starred,
+                id
             )
-            .bind(starred)
-            .bind(id)
             .execute(&self.pool)
             .await?,
         )

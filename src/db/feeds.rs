@@ -1,6 +1,4 @@
 use chrono::{DateTime, Utc};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{FromRow, Row};
 use url::Url;
 
 use super::{Db, DbError, found, from_ts, place, ts};
@@ -40,29 +38,39 @@ pub enum FetchRecord<'a> {
     },
 }
 
-macro_rules! feed_columns {
-    () => {
-        "id, folder_id, url, site_url, title, custom_title, etag, last_modified, next_fetch_at, error_count, last_error"
-    };
+struct FeedRow {
+    id: FeedId,
+    folder_id: Option<FolderId>,
+    url: String,
+    site_url: Option<String>,
+    title: String,
+    custom_title: Option<String>,
+    etag: Option<String>,
+    last_modified: Option<String>,
+    next_fetch_at: i64,
+    error_count: u32,
+    last_error: Option<String>,
 }
 
-impl FromRow<'_, SqliteRow> for Feed {
-    fn from_row(row: &SqliteRow) -> sqlx::Result<Self> {
-        let url: String = row.try_get("url")?;
+impl TryFrom<FeedRow> for Feed {
+    type Error = DbError;
+
+    fn try_from(row: FeedRow) -> Result<Self, DbError> {
         Ok(Self {
-            id: row.try_get("id")?,
-            folder: row.try_get("folder_id")?,
-            url: Url::parse(&url).map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
-            site_url: parse_optional_url(row.try_get("site_url")?),
-            title: row.try_get("title")?,
-            custom_title: row.try_get("custom_title")?,
+            id: row.id,
+            folder: row.folder_id,
+            url: Url::parse(&row.url)
+                .map_err(|e| DbError::Sqlx(sqlx::Error::Decode(Box::new(e))))?,
+            site_url: parse_optional_url(row.site_url),
+            title: row.title,
+            custom_title: row.custom_title,
             validators: Validators {
-                etag: row.try_get("etag")?,
-                last_modified: row.try_get("last_modified")?,
+                etag: row.etag,
+                last_modified: row.last_modified,
             },
-            next_fetch_at: from_ts(row.try_get("next_fetch_at")?),
-            error_count: row.try_get("error_count")?,
-            last_error: row.try_get("last_error")?,
+            next_fetch_at: from_ts(row.next_fetch_at),
+            error_count: row.error_count,
+            last_error: row.last_error,
         })
     }
 }
@@ -74,31 +82,42 @@ pub(super) fn parse_optional_url(url: Option<String>) -> Option<Url> {
 impl Db {
     /// The new feed is due immediately so the poller picks it up on its next pass.
     pub async fn insert_feed(&self, new: NewFeed, now: DateTime<Utc>) -> Result<Feed, DbError> {
-        let feed = sqlx::query_as(concat!(
-            "INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at)
-             VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5)
-             RETURNING ",
-            feed_columns!()
-        ))
-        .bind(new.folder)
-        .bind(new.url.as_str())
-        .bind(new.site_url.as_ref().map(Url::as_str))
-        .bind(&new.title)
-        .bind(ts(now))
+        let url = new.url.as_str();
+        let site_url = new.site_url.as_ref().map(Url::as_str);
+        let now = ts(now);
+        sqlx::query_as!(
+            FeedRow,
+            r#"INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at)
+               VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5)
+               RETURNING id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+                         custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error"#,
+            new.folder,
+            url,
+            site_url,
+            new.title,
+            now
+        )
         .fetch_one(&self.pool)
-        .await?;
-        Ok(feed)
+        .await?
+        .try_into()
     }
 
     pub async fn feeds_due(&self, now: DateTime<Utc>) -> Result<Vec<Feed>, DbError> {
-        Ok(sqlx::query_as(concat!(
-            "SELECT ",
-            feed_columns!(),
-            " FROM feeds WHERE next_fetch_at <= ? ORDER BY next_fetch_at, id"
-        ))
-        .bind(ts(now))
+        let now = ts(now);
+        sqlx::query_as!(
+            FeedRow,
+            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+                      custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error
+               FROM feeds
+               WHERE next_fetch_at <= ?
+               ORDER BY next_fetch_at, id"#,
+            now
+        )
         .fetch_all(&self.pool)
-        .await?)
+        .await?
+        .into_iter()
+        .map(Feed::try_from)
+        .collect()
     }
 
     pub async fn move_feed(
@@ -108,25 +127,25 @@ impl Db {
         index: usize,
     ) -> Result<(), DbError> {
         let mut tx = self.pool.begin().await?;
-        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM feeds WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&mut *tx)
+        sqlx::query_scalar!("SELECT 1 FROM feeds WHERE id = ?", id)
+            .fetch_one(&mut *tx)
             .await?;
-        if exists.is_none() {
-            return Err(DbError::NotFound);
-        }
-        let siblings: Vec<FeedId> =
-            sqlx::query_scalar("SELECT id FROM feeds WHERE folder_id IS ? ORDER BY position, id")
-                .bind(folder)
-                .fetch_all(&mut *tx)
-                .await?;
+        let siblings = sqlx::query_scalar!(
+            r#"SELECT id AS "id: FeedId" FROM feeds WHERE folder_id IS ? ORDER BY position, id"#,
+            folder
+        )
+        .fetch_all(&mut *tx)
+        .await?;
         for (position, feed) in place(siblings, id, index).into_iter().enumerate() {
-            sqlx::query("UPDATE feeds SET folder_id = ?, position = ? WHERE id = ?")
-                .bind(folder)
-                .bind(position as i64)
-                .bind(feed)
-                .execute(&mut *tx)
-                .await?;
+            let position = position as i64;
+            sqlx::query!(
+                "UPDATE feeds SET folder_id = ?, position = ? WHERE id = ?",
+                folder,
+                position,
+                feed
+            )
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
         Ok(())
@@ -134,9 +153,7 @@ impl Db {
 
     pub async fn set_custom_title(&self, id: FeedId, title: Option<&str>) -> Result<(), DbError> {
         found(
-            sqlx::query("UPDATE feeds SET custom_title = ? WHERE id = ?")
-                .bind(title)
-                .bind(id)
+            sqlx::query!("UPDATE feeds SET custom_title = ? WHERE id = ?", title, id)
                 .execute(&self.pool)
                 .await?,
         )
@@ -144,8 +161,7 @@ impl Db {
 
     pub async fn delete_feed(&self, id: FeedId) -> Result<(), DbError> {
         found(
-            sqlx::query("DELETE FROM feeds WHERE id = ?")
-                .bind(id)
+            sqlx::query!("DELETE FROM feeds WHERE id = ?", id)
                 .execute(&self.pool)
                 .await?,
         )
@@ -160,56 +176,64 @@ impl Db {
         next_fetch_at: DateTime<Utc>,
     ) -> Result<u64, DbError> {
         let mut tx = self.pool.begin().await?;
+        let now = ts(now);
+        let next_fetch_at = ts(next_fetch_at);
         let mut inserted = 0;
 
         let updated = match record {
             FetchRecord::NotModified => {
-                sqlx::query("UPDATE feeds SET error_count = 0, last_error = NULL, next_fetch_at = ? WHERE id = ?")
-                    .bind(ts(next_fetch_at))
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await?
+                sqlx::query!(
+                    "UPDATE feeds SET error_count = 0, last_error = NULL, next_fetch_at = ? WHERE id = ?",
+                    next_fetch_at,
+                    id
+                )
+                .execute(&mut *tx)
+                .await?
             }
             FetchRecord::Failed { error } => {
-                sqlx::query(
+                sqlx::query!(
                     "UPDATE feeds SET error_count = error_count + 1, last_error = ?, next_fetch_at = ? WHERE id = ?",
+                    error,
+                    next_fetch_at,
+                    id
                 )
-                .bind(error)
-                .bind(ts(next_fetch_at))
-                .bind(id)
                 .execute(&mut *tx)
                 .await?
             }
             FetchRecord::Updated { feed, validators } => {
-                let updated = sqlx::query(
+                let site_url = feed.site_url.as_ref().map(Url::as_str);
+                let updated = sqlx::query!(
                     "UPDATE feeds
                      SET title = ?, site_url = COALESCE(?, site_url), etag = ?, last_modified = ?,
                          error_count = 0, last_error = NULL, next_fetch_at = ?
                      WHERE id = ?",
+                    feed.title,
+                    site_url,
+                    validators.etag,
+                    validators.last_modified,
+                    next_fetch_at,
+                    id
                 )
-                .bind(&feed.title)
-                .bind(feed.site_url.as_ref().map(Url::as_str))
-                .bind(validators.etag)
-                .bind(validators.last_modified)
-                .bind(ts(next_fetch_at))
-                .bind(id)
                 .execute(&mut *tx)
                 .await?;
 
                 for item in &feed.items {
-                    inserted += sqlx::query(
+                    let url = item.url.as_ref().map(Url::as_str);
+                    let content = item.content.as_ref().map(|c| c.as_str());
+                    let published_at = ts(item.published_at);
+                    inserted += sqlx::query!(
                         "INSERT INTO items (feed_id, guid, url, title, author, content_html, published_at, fetched_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                          ON CONFLICT (feed_id, guid) DO NOTHING",
+                        id,
+                        item.guid,
+                        url,
+                        item.title,
+                        item.author,
+                        content,
+                        published_at,
+                        now
                     )
-                    .bind(id)
-                    .bind(&item.guid)
-                    .bind(item.url.as_ref().map(Url::as_str))
-                    .bind(&item.title)
-                    .bind(&item.author)
-                    .bind(item.content.as_ref().map(|c| c.as_str()))
-                    .bind(ts(item.published_at))
-                    .bind(ts(now))
                     .execute(&mut *tx)
                     .await?
                     .rows_affected();
