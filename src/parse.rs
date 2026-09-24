@@ -44,7 +44,8 @@ pub fn parse(
     Ok(ParsedFeed {
         title: feed
             .title
-            .map(|t| t.content)
+            .map(|t| t.content.trim().to_string())
+            .filter(|t| !t.is_empty())
             .unwrap_or_else(|| feed_url.host_str().unwrap_or(feed_url.as_str()).to_string()),
         site_url: primary_link(&feed.links),
         items: feed

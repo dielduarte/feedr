@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #1d1d1f;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f6;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f4f4f6;
+  --muted-foreground: #6b6b70;
+  --accent: #f4f4f6;
+  --accent-foreground: #1d1d1f;
+  --destructive: #c8452b;
+  --border: #e5e5e8;
+  --input: #e5e5e8;
+  --ring: #3fb6ce;
+
+  --sidebar: #eeeef0;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #1d1d1f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(29 29 31 / 0.07);
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e5e5e8;
+  --sidebar-ring: #3fb6ce;
+
+  /* The reference's one colour: its dotted cyan ring. Used for live and unread state only. */
+  --signal: #3fb6ce;
+  --faint: #a0a0a6;
+  --warning: #b8482a;
+  --warning-soft: #fbf1ec;
+}
+
+/* Floating panels (menus, dialogs, tooltips) are dark in the reference; they opt in with `dark`. */
+.dark {
+  --background: #1f1f21;
+  --foreground: #f4f4f6;
+  --popover: #2b2b2e;
+  --popover-foreground: #f4f4f6;
+  --primary: #f4f4f6;
+  --primary-foreground: #1d1d1f;
+  --secondary: #3a3a3d;
+  --secondary-foreground: #f4f4f6;
+  --muted: #3a3a3d;
+  --muted-foreground: #a3a3a9;
+  --accent: #3a3a3d;
+  --accent-foreground: #f4f4f6;
+  --destructive: #ff9a88;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.1);
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-signal: var(--signal);
+  --color-faint: var(--faint);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  :root {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-sidebar font-sans text-foreground;
+  }
+}

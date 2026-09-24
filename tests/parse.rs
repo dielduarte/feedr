@@ -145,3 +145,10 @@ fn summarizes_items_as_plain_text_preferring_the_feed_summary() {
     assert_eq!(rss.items[0].summary.as_deref(), Some("Short summary"));
     assert_eq!(atom.items[0].summary.as_deref(), Some("Atom body"));
 }
+
+#[test]
+fn names_feeds_with_a_blank_title_after_their_host() {
+    let feed = parse_fixture("untitled.xml", "https://untitled.example.com/feed.xml");
+
+    assert_eq!(feed.title, "untitled.example.com");
+}
