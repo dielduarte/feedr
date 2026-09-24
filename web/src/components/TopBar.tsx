@@ -45,18 +45,24 @@ type Props = {
 
 export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefresh, view }: Props) {
   const { state, isMobile } = useSidebar()
+  const sidebarHidden = state === 'collapsed' || isMobile
 
   return (
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
       <div className="flex min-w-0 items-center gap-2">
-        {(state === 'collapsed' || isMobile) && <SidebarTrigger className="text-muted-foreground" />}
+        {sidebarHidden && <SidebarTrigger className="text-muted-foreground" />}
         {/* One fixed-size slot for both views, so the switcher never shifts when an article opens. */}
         {view.kind === 'reader' ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={view.actions.onBack}>
             <ArrowLeft />
           </IconAction>
         ) : (
-          <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4" aria-hidden>
+          // Next to the sidebar button the icon would read as a second control, so it steps aside
+          // while still holding its space.
+          <span
+            className={cn('grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4', sidebarHidden && 'invisible')}
+            aria-hidden
+          >
             <ScopeIcon scope={scope} sidebar={sidebar} />
           </span>
         )}
