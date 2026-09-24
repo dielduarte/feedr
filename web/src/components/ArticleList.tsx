@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useNow } from '@/lib/hooks'
 import { cn } from '@/lib/utils'
 import type { ItemSummary } from '../api'
-import { relativeTime } from '../format'
+import { fullDate, relativeTime } from '../format'
 import { itemPath, type Scope } from '../routes'
 
 type Props = {
@@ -74,7 +74,11 @@ export function ArticleList({ scope, heading, details, items, loading, hasMore, 
                         {unread && <span className="sr-only">Unread: </span>}
                         {item.title ?? 'Untitled'}
                       </span>
-                      <time dateTime={item.published_at} className="text-xs whitespace-nowrap text-faint tabular-nums">
+                      <time
+                        dateTime={item.published_at}
+                        title={fullDate(new Date(item.published_at))}
+                        className="w-10 shrink-0 text-right text-xs whitespace-nowrap text-faint tabular-nums"
+                      >
                         {relativeTime(new Date(item.published_at), now)}
                       </time>
                     </span>

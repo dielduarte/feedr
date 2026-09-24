@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readingMinutes, relativeTime, wordCount } from './format'
+import { fullDate, readingMinutes, relativeTime, wordCount } from './format'
 
 const now = new Date('2026-09-23T12:00:00Z')
 const ago = (ms: number) => new Date(now.getTime() - ms)
@@ -8,20 +8,29 @@ const HOUR = 60 * MIN
 const DAY = 24 * HOUR
 
 describe('relativeTime', () => {
-  it('is compact for recent dates', () => {
-    expect(relativeTime(ago(20_000), now)).toBe('Just now')
+  it('uses one compact format at every age', () => {
+    expect(relativeTime(ago(20_000), now)).toBe('now')
     expect(relativeTime(ago(5 * MIN), now)).toBe('5m')
     expect(relativeTime(ago(3 * HOUR), now)).toBe('3h')
     expect(relativeTime(ago(2 * DAY), now)).toBe('2d')
+    expect(relativeTime(ago(20 * DAY), now)).toBe('2w')
+    expect(relativeTime(ago(150 * DAY), now)).toBe('5mo')
+    expect(relativeTime(ago(800 * DAY), now)).toBe('2y')
   })
 
-  it('shows the date after a week, with the year only when it differs', () => {
-    expect(relativeTime(new Date('2026-09-03T12:00:00Z'), now)).toBe('Sep 3')
-    expect(relativeTime(new Date('2025-12-24T12:00:00Z'), now)).toBe('Dec 24, 2025')
+  it('never needs more than four characters, so dates line up in a column', () => {
+    const ages = [0, MIN, 59 * MIN, 23 * HOUR, 6 * DAY, 29 * DAY, 364 * DAY, 99 * 365 * DAY]
+    for (const age of ages) expect(relativeTime(ago(age), now).length).toBeLessThanOrEqual(4)
   })
 
   it('treats future dates as just published', () => {
-    expect(relativeTime(new Date(now.getTime() + HOUR), now)).toBe('Just now')
+    expect(relativeTime(new Date(now.getTime() + HOUR), now)).toBe('now')
+  })
+})
+
+describe('fullDate', () => {
+  it('spells out the date for tooltips', () => {
+    expect(fullDate(new Date('2025-10-09T12:00:00Z'))).toBe('October 9, 2025')
   })
 })
 

@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { Link } from 'wouter'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Item } from '../api'
-import { readingMinutes } from '../format'
+import { fullDate, readingMinutes } from '../format'
 import { scopePath } from '../routes'
 import { FeedIcon } from './FeedIcon'
 
@@ -13,8 +13,6 @@ type Props = {
   siteUrl: string | null
   missing: boolean
 }
-
-const longDate = new Intl.DateTimeFormat('en-US', { dateStyle: 'long' })
 
 const prose = [
   'prose prose-neutral max-w-none text-[#2a2a2d] prose-p:leading-[1.72]',
@@ -71,7 +69,7 @@ export function Reader({ item, words, siteUrl, missing }: Props) {
           {item.feed_title}
         </Link>
         {item.author && <span>{item.author}</span>}
-        <time dateTime={item.published_at}>{longDate.format(new Date(item.published_at))}</time>
+        <time dateTime={item.published_at}>{fullDate(new Date(item.published_at))}</time>
         {words > 0 && <span>{readingMinutes(words)} min read</span>}
       </div>
 
