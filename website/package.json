@@ -2,9 +2,11 @@
   "name": "feedrsauros-website",
   "private": true,
   "scripts": {
-    "dev": "servor . index.html 8080 --reload --browse"
+    "dev": "servor public index.html 8080 --reload --browse",
+    "deploy": "sst deploy --stage production"
   },
   "devDependencies": {
-    "servor": "^4.0.2"
+    "servor": "^4.0.2",
+    "sst": "^4.17.1"
   }
 }
