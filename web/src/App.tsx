@@ -4,14 +4,14 @@ import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/button'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar'
 import { useShortcuts, useStoredState } from '@/lib/hooks'
-import { api, listsUnreadOnly, type Sidebar as SidebarData, type SidebarFeed } from './api'
+import { listsUnreadOnly, type Sidebar as SidebarData, type SidebarFeed } from './api'
 import { AppSidebar } from './components/AppSidebar'
 import { ArticleList } from './components/ArticleList'
 import { AddFeedDialog, ShortcutsDialog, TransferDialog } from './components/Dialogs'
 import { Reader } from './components/Reader'
 import { TopBar } from './components/TopBar'
 import { wordCount } from './format'
-import { useItem, useItems, useMarkAllRead, usePollerEvents, useSidebar as useSidebarData, useUpdateItem } from './queries'
+import { useItem, useItems, useMarkAllRead, usePoller, useSidebar as useSidebarData, useUpdateItem } from './queries'
 import { itemPath, parseLocation, scopePath, type Scope } from './routes'
 
 type Dialog = 'add' | 'transfer' | 'shortcuts' | null
@@ -54,7 +54,7 @@ function Shell() {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  const status = usePollerEvents()
+  const { status, refresh: refreshScope } = usePoller()
   const { data: sidebar } = useSidebarData()
   const unreadOnly = listsUnreadOnly(scope, unreadPreference)
   const itemsQuery = useItems(scope, unreadOnly)
@@ -109,7 +109,7 @@ function Shell() {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
-  const refresh = () => api.refresh(scope.kind === 'feed' || scope.kind === 'folder' ? scope : { kind: 'all' })
+  const refresh = () => refreshScope(scope.kind === 'feed' || scope.kind === 'folder' ? scope : { kind: 'all' })
   const current = item ?? selectedItem
   const toggleStar = (target = current) => target && updateItem.mutate({ item: target, patch: { starred: !target.starred_at } })
   const toggleRead = (target = current) => target && updateItem.mutate({ item: target, patch: { read: !target.read_at } })

@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Item, type ItemSummary, type Page, type PollerEvent, type Sidebar } from './api'
 import { scopePath, type Scope } from './routes'
@@ -139,10 +139,38 @@ export function useSidebarMutation<Args, Result>(run: (args: Args) => Promise<Re
 
 export type PollerStatus = { refreshing: boolean; offline: boolean }
 
-/** Follows the server's poller over SSE and refreshes what's on screen as feeds update. */
-export function usePollerEvents(): PollerStatus {
+/** How long a requested refresh may wait for the server to start before we stop showing it. */
+const REFRESH_START_TIMEOUT = 10_000
+/** One full turn of the spin animation, so even an instant refresh is visibly acknowledged. */
+const MIN_REFRESH_DISPLAY = 1_000
+
+/**
+ * Follows the server's poller over SSE, refreshes what's on screen as feeds update, and
+ * reports whether a refresh is in progress, including one just requested from here.
+ */
+export function usePoller() {
   const client = useQueryClient()
   const [status, setStatus] = useState<PollerStatus>({ refreshing: false, offline: false })
+  const startTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const stopTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const shownSince = useRef(0)
+
+  const showRefreshing = useCallback(() => {
+    clearTimeout(stopTimeout.current)
+    setStatus((s) => {
+      if (!s.refreshing) shownSince.current = performance.now()
+      return { ...s, refreshing: true }
+    })
+  }, [])
+
+  const hideRefreshing = useCallback((offline?: boolean) => {
+    const remaining = MIN_REFRESH_DISPLAY - (performance.now() - shownSince.current)
+    clearTimeout(stopTimeout.current)
+    stopTimeout.current = setTimeout(
+      () => setStatus((s) => ({ refreshing: false, offline: offline ?? s.offline })),
+      Math.max(0, remaining),
+    )
+  }, [])
 
   useEffect(() => {
     const source = new EventSource('/api/events')
@@ -150,14 +178,15 @@ export function usePollerEvents(): PollerStatus {
       const event: PollerEvent = JSON.parse(message.data)
       switch (event.type) {
         case 'batch_started':
-          setStatus((s) => ({ ...s, refreshing: true }))
+          clearTimeout(startTimeout.current)
+          showRefreshing()
           break
         case 'feed_refreshed':
         case 'feed_failed':
           client.invalidateQueries({ queryKey: keys.sidebar })
           break
         case 'batch_finished':
-          setStatus({ refreshing: false, offline: event.health === 'offline' })
+          hideRefreshing(event.health === 'offline')
           client.invalidateQueries({ queryKey: keys.sidebar })
           client.invalidateQueries({ queryKey: ['items'] })
           break
@@ -166,10 +195,34 @@ export function usePollerEvents(): PollerStatus {
           break
       }
     }
-    return () => source.close()
-  }, [client])
+    return () => {
+      source.close()
+      clearTimeout(startTimeout.current)
+      clearTimeout(stopTimeout.current)
+    }
+  }, [client, showRefreshing, hideRefreshing])
 
-  return status
+  // Shows progress from the click, before the server's batch begins; stops if nothing was due
+  // or the server never picks it up.
+  const refresh = useCallback(async (scope: Scope) => {
+    const stop = () => hideRefreshing()
+    showRefreshing()
+    clearTimeout(startTimeout.current)
+    startTimeout.current = setTimeout(stop, REFRESH_START_TIMEOUT)
+    try {
+      const { scheduled } = await api.refresh(scope)
+      if (scheduled === 0) {
+        clearTimeout(startTimeout.current)
+        stop()
+      }
+    } catch (error) {
+      clearTimeout(startTimeout.current)
+      stop()
+      toast.error(sentence((error as Error).message))
+    }
+  }, [showRefreshing, hideRefreshing])
+
+  return { status, refresh }
 }
 
 function sentence(text: string) {

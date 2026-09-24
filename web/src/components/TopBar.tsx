@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, CircleDot, Folder, Inbox, Star, WifiOff } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, CircleDot, Folder, Inbox, RefreshCw, Star, WifiOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -75,13 +76,8 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
             <WifiOff className="size-3.5" /> Offline
           </span>
         )}
-        <IconAction
-          label={status.refreshing ? 'Refreshing feeds' : 'Refresh feeds'}
-          shortcut="R"
-          onClick={onRefresh}
-          className="text-signal hover:text-signal"
-        >
-          <RefreshDots spinning={status.refreshing} />
+        <IconAction label={status.refreshing ? 'Refreshing feeds' : 'Refresh feeds'} shortcut="R" onClick={onRefresh}>
+          <RefreshIcon refreshing={status.refreshing} />
         </IconAction>
       </div>
     </header>
@@ -202,18 +198,21 @@ function ScopeSwitcher({ scope, label, sidebar, onNavigate }: SwitcherProps) {
   )
 }
 
-/** The reference's dotted cyan ring, used as the refresh control; it turns while feeds update. */
-function RefreshDots({ spinning }: { spinning: boolean }) {
+/**
+ * Spins while refreshing and always finishes the turn it's on, so even an instant refresh shows
+ * one full rotation and the icon never stops at an odd angle.
+ */
+function RefreshIcon({ refreshing }: { refreshing: boolean }) {
+  const [spinning, setSpinning] = useState(refreshing)
+
+  useEffect(() => {
+    if (refreshing) setSpinning(true)
+  }, [refreshing])
+
   return (
-    <svg
-      viewBox="0 0 20 20"
-      aria-hidden
-      className={cn('size-5 fill-current', spinning && 'animate-spin [animation-duration:1.1s] motion-reduce:[animation-duration:4s]')}
-    >
-      {Array.from({ length: 8 }, (_, i) => {
-        const angle = (i / 8) * Math.PI * 2
-        return <circle key={i} cx={10 + Math.cos(angle) * 6.5} cy={10 + Math.sin(angle) * 6.5} r={1.6} fillOpacity={0.3 + (i / 7) * 0.7} />
-      })}
-    </svg>
+    <RefreshCw
+      className={cn(spinning && 'animate-spin motion-reduce:[animation-duration:3s]')}
+      onAnimationIteration={() => !refreshing && setSpinning(false)}
+    />
   )
 }
