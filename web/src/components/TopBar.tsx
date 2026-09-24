@@ -23,7 +23,7 @@ type Props = {
   chrome: Chrome
   /** Shown in place of the leading icon, e.g. to return from an article to its list. */
   onBack?: () => void
-  /** Trailing breadcrumb after the switcher, truncated first when space runs out. */
+  /** Title centred on the bar, cut off with an ellipsis when space runs out. */
   crumb?: string | null
   /** Page-specific actions, placed before the refresh control. */
   children?: ReactNode
@@ -34,8 +34,8 @@ export function TopBar({ chrome, onBack, crumb, children }: Props) {
   const sidebarHidden = state === 'collapsed' || isMobile
 
   return (
-    <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+    <header className="grid h-13 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 border-b px-3">
+      <div className="flex min-w-0 items-center gap-2">
         {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
         {onBack ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={onBack}>
@@ -49,10 +49,11 @@ export function TopBar({ chrome, onBack, crumb, children }: Props) {
           </span>
         )}
         <ScopeSwitcher scope={chrome.scope} label={chrome.label} sidebar={chrome.sidebar} onNavigate={chrome.onNavigate} />
-        {crumb ? <span className="truncate text-[13.5px] text-muted-foreground max-md:hidden">{crumb}</span> : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <span className="truncate text-center text-[13.5px] text-muted-foreground max-md:hidden">{crumb}</span>
+
+      <div className="flex items-center justify-end gap-1">
         {children}
         {chrome.status.offline ? (
           <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="feedrsauros can't reach the internet and will retry.">
