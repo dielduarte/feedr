@@ -17,7 +17,7 @@ export default $config({
       notFound: "404",
       domain:
         $app.stage === "production"
-          ? { name: "feedrsauros.com", redirects: ["www.feedrsauros.com"] }
+          ? { name: "feedrsauros.com" }
           : undefined,
     });
     return { url: site.url };
