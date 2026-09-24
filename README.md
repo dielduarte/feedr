@@ -2,6 +2,8 @@
 
 A local-first RSS reader: one small program that fetches your feeds in the background and serves a clean web app to read them.
 
+Website: [feedrsauros.com](https://feedrsauros.com)
+
 - Follows RSS, Atom and JSON Feed. Paste a site's address and feedr finds its feed.
 - Organise feeds into folders by dragging them in the sidebar.
 - Checks busy feeds more often and quiet ones less, and backs off politely when sites ask it to.

@@ -17,7 +17,7 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 const USER_AGENT: &str = concat!(
     "feedr/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/dielduarte/feedr)"
+    " (+https://feedrsauros.com)"
 );
 
 #[expect(
