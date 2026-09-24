@@ -1,3 +1,4 @@
 /target
 /web/node_modules
 /web/dist
+/website/node_modules

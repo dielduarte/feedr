@@ -1,0 +1,10 @@
+{
+  "name": "feedrsauros-website",
+  "private": true,
+  "scripts": {
+    "dev": "servor . index.html 8080 --reload --browse"
+  },
+  "devDependencies": {
+    "servor": "^4.0.2"
+  }
+}

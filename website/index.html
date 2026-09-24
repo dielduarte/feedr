@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>feedrsauros — RSS isn't extinct</title>
+    <meta
+      name="description"
+      content="feedrsauros is a small RSS reader you run yourself. Follow the sites you like and read everything they publish in one calm place. No account, no algorithm, no tracking."
+    />
+    <meta name="theme-color" content="#fbfcfa" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="preload" href="/inter.woff2" as="font" type="font/woff2" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://feedrsauros.com/" />
+    <meta property="og:title" content="feedrsauros — RSS isn't extinct" />
+    <meta property="og:description" content="A small RSS reader you run yourself. No account, no algorithm, no tracking." />
+    <meta property="og:image" content="https://feedrsauros.com/screenshot-list.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <style>
+      @font-face {
+        font-family: 'Inter';
+        src: url('/inter.woff2') format('woff2');
+        font-weight: 100 900;
+        font-display: swap;
+      }
+
+      :root {
+        /* Taken from the logo: its outline, its skin, and the shadow under its feet. */
+        --forest: #0e2a1f;
+        --green: #5aad81;
+        --green-deep: #2f7d55;
+        --mint: #cfe8d2;
+        --paper: #fbfcfa;
+        --muted: #536559;
+        --line: #e2eae4;
+        --code: #0f2a20;
+
+        color-scheme: light;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: var(--forest);
+        background: var(--paper);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.6;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--green);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+
+      .wrap {
+        width: min(1120px, 100% - 40px);
+        margin-inline: auto;
+      }
+
+      /* Header */
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-block: 22px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+      }
+
+      .top nav {
+        display: flex;
+        gap: 26px;
+        font-size: 15px;
+      }
+
+      .top nav a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .top nav a:hover {
+        color: var(--forest);
+      }
+
+      /* Hero: the one loud moment on the page. */
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 48px;
+        padding-block: 72px 56px;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(48px, 8vw, 96px);
+        line-height: 0.98;
+        font-weight: 750;
+        letter-spacing: -0.045em;
+      }
+
+      .hero p {
+        max-width: 36ch;
+        margin: 26px 0 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.55;
+      }
+
+      .dino {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: clamp(200px, 26vw, 300px);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: var(--mint);
+      }
+
+      .dino img {
+        width: 84%;
+        height: auto;
+        transform: translateY(-4%);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 34px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        height: 46px;
+        padding: 0 20px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 550;
+        text-decoration: none;
+      }
+
+      .button-primary {
+        background: var(--forest);
+        color: var(--paper);
+      }
+
+      .button-primary:hover {
+        background: #17402f;
+      }
+
+      .button-secondary {
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .button-secondary:hover {
+        border-color: var(--green);
+      }
+
+      /* Screenshots */
+
+      .shot {
+        margin: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #eeeef0;
+        box-shadow:
+          0 0 0 1px rgb(14 42 31 / 0.06),
+          0 30px 60px -30px rgb(14 42 31 / 0.35);
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      /* Features */
+
+      section {
+        padding-block: 96px 0;
+      }
+
+      h2 {
+        max-width: 22ch;
+        margin: 0 0 12px;
+        font-size: clamp(30px, 4vw, 42px);
+        line-height: 1.1;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .lede {
+        max-width: 56ch;
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 36px 48px;
+        margin: 48px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .features li {
+        padding-top: 18px;
+        border-top: 2px solid var(--mint);
+      }
+
+      .features h3 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+
+      .features p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      kbd {
+        display: inline-block;
+        min-width: 1.6em;
+        padding: 0 0.35em;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: #fff;
+        font: inherit;
+        font-size: 0.85em;
+        text-align: center;
+      }
+
+      .reading {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        align-items: center;
+        gap: 56px;
+      }
+
+      /* Install */
+
+      .install {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        margin-top: 44px;
+      }
+
+      .install article {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 26px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #fff;
+      }
+
+      .install h3 {
+        margin: 0;
+        font-size: 19px;
+        letter-spacing: -0.01em;
+      }
+
+      .install p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .code {
+        position: relative;
+      }
+
+      pre {
+        margin: 0;
+        /* Room on the right so the copy button never covers a command. */
+        padding: 18px 84px 18px 20px;
+        overflow-x: auto;
+        border-radius: 12px;
+        background: var(--code);
+        color: #e4f2e8;
+        font: 14px/1.7 ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+
+      .copy {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 4px 10px;
+        border: 0;
+        border-radius: 7px;
+        background: rgb(255 255 255 / 0.1);
+        color: #e4f2e8;
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .copy:hover {
+        background: rgb(255 255 255 / 0.18);
+      }
+
+      .note {
+        max-width: 70ch;
+        margin: 28px 0 0;
+        padding: 16px 20px;
+        border-left: 3px solid var(--green);
+        border-radius: 0 10px 10px 0;
+        background: #fff;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      code {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.9em;
+      }
+
+      /* Footer */
+
+      footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 110px;
+        padding-block: 32px 44px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      footer .brand {
+        color: var(--forest);
+        font-size: 16px;
+      }
+
+      footer .brand img {
+        width: 26px;
+        height: 26px;
+      }
+
+      /* Narrow screens */
+
+      @media (max-width: 860px) {
+        .hero,
+        .reading {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .hero {
+          gap: 36px;
+          padding-block: 40px 44px;
+        }
+
+        .dino {
+          grid-row: 1;
+          width: 160px;
+        }
+
+        .features {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .install {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        section {
+          padding-block-start: 72px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        body {
+          font-size: 16px;
+        }
+
+        .top nav a:not(:last-child) {
+          display: none;
+        }
+
+        .hero p {
+          font-size: 18px;
+        }
+
+        .features {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <a class="brand" href="/">
+          <img src="/logo.svg" alt="" width="34" height="34" />
+          feedrsauros
+        </a>
+        <nav aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#install">Install</a>
+          <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>
+        </nav>
+      </header>
+
+      <main>
+        <div class="hero">
+          <div>
+            <h1>RSS isn't extinct.</h1>
+            <p>
+              feedrsauros is a small RSS reader you run yourself. Follow the sites you like and read everything they
+              publish in one calm place. No account, no algorithm, no tracking.
+            </p>
+            <div class="actions">
+              <a class="button button-primary" href="#install">Get started</a>
+              <a class="button button-secondary" href="https://github.com/dielduarte/feedrsauros">View on GitHub</a>
+            </div>
+          </div>
+          <div class="dino">
+            <img src="/logo.svg" alt="The feedrsauros dinosaur, reading its feeds on a tablet" width="80" height="80" />
+          </div>
+        </div>
+
+        <figure class="shot">
+          <img
+            src="/screenshot-list.png"
+            alt="The feedrsauros app: folders of feeds in the sidebar and the latest Cloudflare Blog articles in the list"
+            width="2880"
+            height="1800"
+          />
+        </figure>
+
+        <section id="features" aria-labelledby="features-title">
+          <h2 id="features-title">Everything the sites publish. Nothing else.</h2>
+          <p class="lede">
+            No feed ranks what you see, and nothing is left out. You choose the sites; feedrsauros keeps up with them.
+          </p>
+
+          <ul class="features">
+            <li>
+              <h3>Paste a site, get its feed</h3>
+              <p>Type a website's address and feedrsauros finds its RSS, Atom or JSON feed for you.</p>
+            </li>
+            <li>
+              <h3>Folders you arrange</h3>
+              <p>Group feeds into folders and drag them around the sidebar until it reads the way you think.</p>
+            </li>
+            <li>
+              <h3>Checks politely</h3>
+              <p>Busy sites are checked often, quiet ones rarely, and it backs off whenever a site asks it to.</p>
+            </li>
+            <li>
+              <h3>New articles appear on their own</h3>
+              <p>Counts and lists update while the page is open. No reloading to see what's new.</p>
+            </li>
+            <li>
+              <h3>Made for the keyboard</h3>
+              <p>
+                <kbd>J</kbd> and <kbd>K</kbd> to move, <kbd>S</kbd> to star, <kbd>M</kbd> to mark read. Your hands can
+                stay put.
+              </p>
+            </li>
+            <li>
+              <h3>Your data stays yours</h3>
+              <p>Everything lives in one file on your machine. Import and export your subscriptions as OPML anytime.</p>
+            </li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="reading-title">
+          <div class="reading">
+            <div>
+              <h2 id="reading-title">A reader that gets out of the way.</h2>
+              <p class="lede">
+                Articles open in a clean, wide column with the site's own words and images, and nothing wrapped around
+                them. When you want the original page, it's one key away.
+              </p>
+            </div>
+            <figure class="shot">
+              <img
+                src="/screenshot-reader.png"
+                alt="An article from the Cloudflare Blog open in the feedrsauros reader"
+                width="2880"
+                height="1800"
+                loading="lazy"
+              />
+            </figure>
+          </div>
+        </section>
+
+        <section id="install" aria-labelledby="install-title">
+          <h2 id="install-title">Up and running in a minute.</h2>
+          <p class="lede">
+            feedrsauros is a single program with the app built in. Run it with Docker, or build it from source.
+          </p>
+
+          <div class="install">
+            <article>
+              <h3>With Docker</h3>
+              <p>Clone the repository and start it. Your feeds are kept in a Docker volume.</p>
+              <div class="code">
+                <pre><code>git clone https://github.com/dielduarte/feedrsauros.git
+cd feedrsauros
+docker compose up -d</code></pre>
+                <button class="copy" type="button">Copy</button>
+              </div>
+              <p>Then open <a href="http://127.0.0.1:7777">127.0.0.1:7777</a>.</p>
+            </article>
+
+            <article>
+              <h3>From source</h3>
+              <p>Needs Rust and pnpm. Installs the <code>feedrsauros</code> command.</p>
+              <div class="code">
+                <pre><code>pnpm --dir web install
+pnpm --dir web build
+cargo install --path .
+feedrsauros serve --open</code></pre>
+                <button class="copy" type="button">Copy</button>
+              </div>
+              <p>Your browser opens with feedrsauros ready to add feeds.</p>
+            </article>
+          </div>
+
+          <p class="note">
+            feedrsauros has no login, so it only listens on your own machine by default. To read from your phone, put it
+            behind a VPN or a reverse proxy with a password. The
+            <a href="https://github.com/dielduarte/feedrsauros#reaching-it-from-other-devices">README</a> shows how.
+          </p>
+        </section>
+      </main>
+
+      <footer>
+        <a class="brand" href="/">
+          <img src="/logo.svg" alt="" width="26" height="26" />
+          feedrsauros
+        </a>
+        <span>Open source on <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>, by <a href="https://github.com/dielduarte">@dielduarte</a>.</span>
+      </footer>
+    </div>
+
+    <script>
+      for (const button of document.querySelectorAll('.copy')) {
+        button.addEventListener('click', async () => {
+          const text = button.previousElementSibling.textContent
+          try {
+            await navigator.clipboard.writeText(text)
+            button.textContent = 'Copied'
+          } catch {
+            button.textContent = 'Press ⌘C'
+            getSelection().selectAllChildren(button.previousElementSibling)
+          }
+          setTimeout(() => (button.textContent = 'Copy'), 1800)
+        })
+      }
+    </script>
+  </body>
+</html>
