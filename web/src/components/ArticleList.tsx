@@ -64,22 +64,22 @@ export function ArticleList({ scope, heading, details, items, loading, hasMore, 
                 <Link
                   href={itemPath(scope, item.id)}
                   className={cn(
-                    'flex gap-3 rounded-[10px] py-3 pr-12 pl-3 focus-visible:-outline-offset-2',
+                    'flex rounded-[10px] py-3 pr-12 pl-3 focus-visible:-outline-offset-2',
                     index === selected && 'bg-secondary',
                   )}
                 >
-                  <span className={cn('mt-[7px] size-[7px] shrink-0 rounded-full', unread && 'bg-signal')} aria-label={unread ? 'Unread' : undefined} />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex items-baseline gap-3">
                       <span className={cn('flex-1 text-[15px] leading-snug font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>
+                        {unread && <span className="sr-only">Unread: </span>}
                         {item.title ?? 'Untitled'}
                       </span>
                       <time dateTime={item.published_at} className="text-xs whitespace-nowrap text-faint tabular-nums">
                         {relativeTime(new Date(item.published_at), now)}
                       </time>
                     </span>
-                    <span className="line-clamp-2 text-[13px] leading-normal text-muted-foreground">
-                      <span className={cn('mr-2 font-medium', unread && 'text-foreground')}>{item.feed_title}</span>
+                    <span className={cn('line-clamp-2 text-[13px] leading-normal', unread ? 'text-muted-foreground' : 'text-faint')}>
+                      <span className={cn('mr-2 font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>{item.feed_title}</span>
                       {item.summary}
                     </span>
                   </span>
