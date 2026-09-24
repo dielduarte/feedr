@@ -69,7 +69,7 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
       <div className="flex items-center gap-1">
         {view.kind === 'list' ? <ListTools {...view.actions} /> : <ReaderTools {...view.actions} />}
         {status.offline && (
-          <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="feedr can't reach the internet and will retry.">
+          <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="feedrsauros can't reach the internet and will retry.">
             <WifiOff className="size-3.5" /> Offline
           </span>
         )}

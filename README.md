@@ -1,10 +1,14 @@
-# feedr
+<p align="center">
+  <img src="assets/logo.svg" alt="The feedrsauros dinosaur reading its feeds" width="160">
+</p>
+
+# feedrsauros
 
 A local-first RSS reader: one small program that fetches your feeds in the background and serves a clean web app to read them.
 
 Website: [feedrsauros.com](https://feedrsauros.com)
 
-- Follows RSS, Atom and JSON Feed. Paste a site's address and feedr finds its feed.
+- Follows RSS, Atom and JSON Feed. Paste a site's address and feedrsauros finds its feed.
 - Organise feeds into folders by dragging them in the sidebar.
 - Checks busy feeds more often and quiet ones less, and backs off politely when sites ask it to.
 - Updates the page live as new articles arrive.
@@ -17,19 +21,19 @@ Requires [Rust](https://rustup.rs) and [pnpm](https://pnpm.io).
 ```bash
 pnpm --dir web install && pnpm --dir web build
 cargo install --path .
-feedr serve --open
+feedrsauros serve --open
 ```
 
-This opens http://127.0.0.1:7777. feedr fetches feeds while `feedr serve` is running and catches up when you start it again. Your data is stored in your user data directory (on macOS, `~/Library/Application Support/feedr/feedr.db`); pass `--db` to use another file.
+This opens http://127.0.0.1:7777. feedrsauros fetches feeds while `feedrsauros serve` is running and catches up when you start it again. Your data is stored in your user data directory (on macOS, `~/Library/Application Support/feedrsauros/feedrsauros.db`); pass `--db` to use another file.
 
 Everything also works from the terminal:
 
 ```bash
-feedr add jvns.ca --folder Blogs   # subscribe to a site or feed
-feedr ls                           # folders, feeds and unread counts
-feedr refresh                      # fetch every feed now
-feedr import subscriptions.opml
-feedr export > subscriptions.opml
+feedrsauros add jvns.ca --folder Blogs   # subscribe to a site or feed
+feedrsauros ls                           # folders, feeds and unread counts
+feedrsauros refresh                      # fetch every feed now
+feedrsauros import subscriptions.opml
+feedrsauros export > subscriptions.opml
 ```
 
 ## Self-host with Docker
@@ -38,18 +42,18 @@ feedr export > subscriptions.opml
 docker compose up -d
 ```
 
-Then open http://127.0.0.1:7777. Articles and subscriptions are kept in the `feedr-data` volume, so they survive restarts and upgrades. To upgrade, pull the latest code and run `docker compose up -d --build`.
+Then open http://127.0.0.1:7777. Articles and subscriptions are kept in the `feedrsauros-data` volume, so they survive restarts and upgrades. To upgrade, pull the latest code and run `docker compose up -d --build`.
 
 Run CLI commands inside the container with `docker compose exec`:
 
 ```bash
-docker compose exec feedr feedr add jvns.ca --folder Blogs
-docker compose exec feedr feedr export > subscriptions.opml
+docker compose exec feedrsauros feedrsauros add jvns.ca --folder Blogs
+docker compose exec feedrsauros feedrsauros export > subscriptions.opml
 ```
 
 ### Reaching it from other devices
 
-feedr has no login: anyone who can reach it can read and change your subscriptions. That is why `compose.yaml` only publishes it on `127.0.0.1`. To use it from your phone or another computer, put it behind a reverse proxy that adds authentication and HTTPS. With [Caddy](https://caddyserver.com), for example:
+feedrsauros has no login: anyone who can reach it can read and change your subscriptions. That is why `compose.yaml` only publishes it on `127.0.0.1`. To use it from your phone or another computer, put it behind a reverse proxy that adds authentication and HTTPS. With [Caddy](https://caddyserver.com), for example:
 
 ```caddy
 feeds.example.com {
@@ -67,18 +71,18 @@ A VPN such as Tailscale works too: keep the port private and reach the machine o
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `FEEDR_PORT` | `7777` | Port on the host (in `compose.yaml`) or the port `feedr serve` listens on. |
-| `FEEDR_HOST` | `127.0.0.1` (`0.0.0.0` in the container) | Address `feedr serve` listens on. |
-| `FEEDR_DB` | your data directory (`/data/feedr.db` in the container) | Database file. |
-| `RUST_LOG` | `feedr=info` | Log detail, for example `feedr=debug`. |
+| `FEEDRSAUROS_PORT` | `7777` | Port on the host (in `compose.yaml`) or the port `feedrsauros serve` listens on. |
+| `FEEDRSAUROS_HOST` | `127.0.0.1` (`0.0.0.0` in the container) | Address `feedrsauros serve` listens on. |
+| `FEEDRSAUROS_DB` | your data directory (`/data/feedrsauros.db` in the container) | Database file. |
+| `RUST_LOG` | `feedrsauros=info` | Log detail, for example `feedrsauros=debug`. |
 
-For example, `FEEDR_PORT=8080 docker compose up -d` serves feedr on http://127.0.0.1:8080.
+For example, `FEEDRSAUROS_PORT=8080 docker compose up -d` serves feedrsauros on http://127.0.0.1:8080.
 
 ## Development
 
 ```bash
 cargo test                    # backend tests
 pnpm --dir web test           # frontend unit tests
-feedr serve                   # API on :7777 …
+feedrsauros serve                   # API on :7777 …
 pnpm --dir web dev            # … and the web app with hot reload, proxying /api to it
 ```

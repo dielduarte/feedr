@@ -1,15 +1,17 @@
+name: feedrsauros
+
 services:
-  feedr:
+  feedrsauros:
     build: .
-    image: feedr
+    image: feedrsauros
     restart: unless-stopped
     init: true
     ports:
-      # Reachable from this machine only: feedr has no login. To use it from other devices,
+      # Reachable from this machine only: feedrsauros has no login. To use it from other devices,
       # put it behind a reverse proxy that adds authentication (see README).
-      - "127.0.0.1:${FEEDR_PORT:-7777}:7777"
+      - "127.0.0.1:${FEEDRSAUROS_PORT:-7777}:7777"
     volumes:
-      - feedr-data:/data
+      - feedrsauros-data:/data
 
 volumes:
-  feedr-data:
+  feedrsauros-data:

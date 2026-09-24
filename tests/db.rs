@@ -1,8 +1,8 @@
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::db::{Db, DbError, FetchRecord, ItemQuery, ItemScope, NewFeed};
-use feedr::model::{FeedId, Validators};
-use feedr::parse::{NewItem, ParsedFeed};
-use feedr::sanitize::SanitizedHtml;
+use feedrsauros::db::{Db, DbError, FetchRecord, ItemQuery, ItemScope, NewFeed};
+use feedrsauros::model::{FeedId, Validators};
+use feedrsauros::parse::{NewItem, ParsedFeed};
+use feedrsauros::sanitize::SanitizedHtml;
 use tempfile::TempDir;
 use url::Url;
 
@@ -13,7 +13,7 @@ struct TestDb {
 
 async fn open() -> TestDb {
     let dir = tempfile::tempdir().unwrap();
-    let db = Db::open(&dir.path().join("feedr.db")).await.unwrap();
+    let db = Db::open(&dir.path().join("feedrsauros.db")).await.unwrap();
     TestDb { db, _dir: dir }
 }
 
@@ -556,7 +556,7 @@ mod items {
         };
         let second_page = t.db.list_items(second).await.unwrap();
 
-        let titles = |items: &[feedr::db::ItemSummary]| {
+        let titles = |items: &[feedrsauros::db::ItemSummary]| {
             items
                 .iter()
                 .map(|i| i.title.clone().unwrap())
@@ -631,11 +631,11 @@ mod items {
         let t = open().await;
 
         assert!(matches!(
-            t.db.get_item(feedr::model::ItemId(1)).await,
+            t.db.get_item(feedrsauros::model::ItemId(1)).await,
             Err(DbError::NotFound)
         ));
         assert!(matches!(
-            t.db.set_read(feedr::model::ItemId(1), true).await,
+            t.db.set_read(feedrsauros::model::ItemId(1), true).await,
             Err(DbError::NotFound)
         ));
     }
@@ -643,7 +643,7 @@ mod items {
 
 mod polling {
     use super::*;
-    use feedr::model::FeedScope;
+    use feedrsauros::model::FeedScope;
 
     #[tokio::test]
     async fn recent_publish_times_are_newest_first_and_limited() {
@@ -669,7 +669,8 @@ mod polling {
         let b = feed_with_items(&t.db, "https://b.com/feed", vec![]).await;
         feed_with_items(&t.db, "https://c.com/feed", vec![]).await;
         t.db.move_feed(b, Some(folder.id), 0).await.unwrap();
-        let due_ids = |due: Vec<feedr::db::Feed>| due.into_iter().map(|f| f.id).collect::<Vec<_>>();
+        let due_ids =
+            |due: Vec<feedrsauros::db::Feed>| due.into_iter().map(|f| f.id).collect::<Vec<_>>();
 
         assert_eq!(t.db.mark_due(FeedScope::Feed(a), at(0)).await.unwrap(), 1);
         assert_eq!(due_ids(t.db.feeds_due(at(0)).await.unwrap()), [a]);

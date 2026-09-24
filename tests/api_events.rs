@@ -3,11 +3,11 @@ use std::time::Duration;
 use axum::Router;
 use axum::routing::get;
 use chrono::Utc;
-use feedr::api::{self, AppState};
-use feedr::db::{Db, NewFeed};
-use feedr::fetch::Fetcher;
-use feedr::model::FeedScope;
-use feedr::poller;
+use feedrsauros::api::{self, AppState};
+use feedrsauros::db::{Db, NewFeed};
+use feedrsauros::fetch::Fetcher;
+use feedrsauros::model::FeedScope;
+use feedrsauros::poller;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -49,7 +49,7 @@ async fn next_event(response: &mut reqwest::Response, wanted: impl Fn(&Value) ->
 async fn streams_poller_events_to_the_browser() {
     let feeds = listen(Router::new().route("/feed.xml", get(|| async { rss2() }))).await;
     let dir = tempfile::tempdir().unwrap();
-    let db = Db::open(&dir.path().join("feedr.db")).await.unwrap();
+    let db = Db::open(&dir.path().join("feedrsauros.db")).await.unwrap();
     let cancel = CancellationToken::new();
     let fetcher = Fetcher::new(Duration::from_secs(5));
     let (poller, _task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());

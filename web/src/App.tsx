@@ -17,7 +17,7 @@ import { itemPath, parseLocation, scopePath, type Scope } from './routes'
 type Dialog = 'add' | 'transfer' | 'shortcuts' | null
 
 export function App() {
-  const [open, setOpen] = useStoredState('feedr.sidebarOpen', true)
+  const [open, setOpen] = useStoredState('feedrsauros.sidebarOpen', true)
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <Shell />
@@ -50,7 +50,7 @@ function Shell() {
   const [path, setPath] = useLocation()
   const { scope, itemId } = parseLocation(path)
   const { toggleSidebar, isMobile, setOpenMobile } = useSidebar()
-  const [unreadPreference, setUnreadPreference] = useStoredState('feedr.unreadOnly', false)
+  const [unreadPreference, setUnreadPreference] = useStoredState('feedrsauros.unreadOnly', false)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
@@ -101,7 +101,7 @@ function Shell() {
 
   useEffect(() => {
     const unread = sidebar?.total_unread ?? 0
-    document.title = `${unread > 0 ? `(${unread}) ` : ''}${item?.title ?? label} — feedr`
+    document.title = `${unread > 0 ? `(${unread}) ` : ''}${item?.title ?? label} — feedrsauros`
   }, [sidebar?.total_unread, item?.title, label])
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = itemsQuery
@@ -260,7 +260,7 @@ function ListDetails({ scope, sidebar, feed }: { scope: Scope; sidebar: SidebarD
       </p>
       {feed?.last_error && (
         <p className="mt-3.5 rounded-lg bg-warning-soft px-3 py-2 text-[13px] leading-normal text-warning">
-          This feed isn't updating: {feed.last_error}. feedr keeps retrying on its own.
+          This feed isn't updating: {feed.last_error}. feedrsauros keeps retrying on its own.
         </p>
       )}
     </>
@@ -273,7 +273,7 @@ function EmptyList({ scope, unreadOnly }: { scope: Scope; unreadOnly: boolean })
       ? ['Nothing starred yet', 'Press S on an article to keep it here.']
       : unreadOnly
         ? ["You're all caught up", 'New articles show up here as your feeds update.']
-        : ['No articles yet', "feedr checks your feeds regularly; articles appear as they're published."]
+        : ['No articles yet', "feedrsauros checks your feeds regularly; articles appear as they're published."]
   return (
     <>
       <p className="mb-1.5 text-[17px] font-medium">{title}</p>
@@ -287,7 +287,7 @@ function Welcome({ onAdd, onImport }: { onAdd: () => void; onImport: () => void 
     <>
       <p className="mb-2 text-2xl font-semibold tracking-[-0.02em]">Start with a site you read</p>
       <p className="max-w-[46ch] leading-relaxed text-muted-foreground">
-        Paste its address and feedr finds the feed, then keeps it up to date while it runs.
+        Paste its address and feedrsauros finds the feed, then keeps it up to date while it runs.
       </p>
       <div className="mt-5.5 flex items-center gap-2">
         <Button onClick={onAdd}>Add a feed</Button>

@@ -29,7 +29,7 @@ const prose = [
 export function Reader({ item, words, siteUrl, missing }: Props) {
   const content = useRef<HTMLDivElement>(null)
 
-  // Links inside articles lead away from feedr, so they get their own tab.
+  // Links inside articles lead away from feedrsauros, so they get their own tab.
   useEffect(() => {
     content.current?.querySelectorAll('a[href]').forEach((link) => {
       link.setAttribute('target', '_blank')

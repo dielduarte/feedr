@@ -60,7 +60,7 @@ const dropLine =
   "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-signal before:content-['']"
 
 export function AppSidebar({ scope, sidebar, onNavigate, onAddFeed, onOpenTransfer, onOpenShortcuts }: Props) {
-  const [collapsed, setCollapsed] = useStoredState<number[]>('feedr.collapsedFolders', [])
+  const [collapsed, setCollapsed] = useStoredState<number[]>('feedrsauros.collapsedFolders', [])
   const [dragging, setDragging] = useState<Dragging>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)

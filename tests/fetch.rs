@@ -5,8 +5,8 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::fetch::{FetchError, Fetched, Fetcher};
-use feedr::model::Validators;
+use feedrsauros::fetch::{FetchError, Fetched, Fetcher};
+use feedrsauros::model::Validators;
 use url::Url;
 
 const ETAG: &str = "\"v1\"";
@@ -50,7 +50,7 @@ async fn requires_user_agent(headers: HeaderMap) -> Response {
     let identified = headers
         .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|ua| ua.starts_with("feedr/"));
+        .is_some_and(|ua| ua.starts_with("feedrsauros/"));
     if identified {
         rss2().into_response()
     } else {

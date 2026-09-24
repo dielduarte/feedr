@@ -8,11 +8,11 @@ use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum::routing::get;
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::db::{Db, Feed, FetchRecord, NewFeed};
-use feedr::fetch::Fetcher;
-use feedr::model::{FeedId, FeedScope};
-use feedr::poller::{self, BatchHealth, PER_HOST, PollerEvent, run_batch};
-use feedr::schedule::POLL_INTERVAL;
+use feedrsauros::db::{Db, Feed, FetchRecord, NewFeed};
+use feedrsauros::fetch::Fetcher;
+use feedrsauros::model::{FeedId, FeedScope};
+use feedrsauros::poller::{self, BatchHealth, PER_HOST, PollerEvent, run_batch};
+use feedrsauros::schedule::POLL_INTERVAL;
 use tempfile::TempDir;
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
@@ -72,7 +72,7 @@ async fn env() -> Env {
 
     let dir = tempfile::tempdir().unwrap();
     Env {
-        db: Db::open(&dir.path().join("feedr.db")).await.unwrap(),
+        db: Db::open(&dir.path().join("feedrsauros.db")).await.unwrap(),
         fetcher: Fetcher::new(Duration::from_secs(5)),
         base,
         traffic,

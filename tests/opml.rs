@@ -1,6 +1,6 @@
 use chrono::{TimeZone, Utc};
-use feedr::db::Db;
-use feedr::opml::{FeedEntry, Subscriptions, import, parse, render};
+use feedrsauros::db::Db;
+use feedrsauros::opml::{FeedEntry, Subscriptions, import, parse, render};
 use tempfile::TempDir;
 
 fn fixture() -> String {
@@ -27,7 +27,10 @@ fn outline(subscriptions: &Subscriptions) -> Vec<(String, Vec<&str>)> {
 
 async fn open() -> (Db, TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    (Db::open(&dir.path().join("feedr.db")).await.unwrap(), dir)
+    (
+        Db::open(&dir.path().join("feedrsauros.db")).await.unwrap(),
+        dir,
+    )
 }
 
 mod parsing {

@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   server: {
-    // `feedr serve` provides the API; the dev server only serves the UI.
+    // `feedrsauros serve` provides the API; the dev server only serves the UI.
     proxy: { '/api': 'http://127.0.0.1:7777' },
   },
   test: { environment: 'jsdom' },

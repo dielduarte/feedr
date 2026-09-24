@@ -1,4 +1,4 @@
-use feedr::sanitize::SanitizedHtml;
+use feedrsauros::sanitize::SanitizedHtml;
 use url::Url;
 
 fn clean(html: &str) -> SanitizedHtml {

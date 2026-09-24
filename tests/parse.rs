@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::parse::{ParsedFeed, parse};
+use feedrsauros::parse::{ParsedFeed, parse};
 use url::Url;
 
 fn fixture(name: &str) -> Vec<u8> {

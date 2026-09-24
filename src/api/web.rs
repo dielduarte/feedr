@@ -10,7 +10,7 @@ use super::ApiError;
 #[allow_missing = true]
 struct Assets;
 
-const NOT_BUILT: &str = "<!doctype html><title>feedr</title>\
+const NOT_BUILT: &str = "<!doctype html><title>feedrsauros</title>\
     <p>The web app hasn't been built yet. Run <code>pnpm --dir web install && pnpm --dir web build</code>, \
     then reload.</p>";
 

@@ -54,7 +54,7 @@ export function AddFeedDialog({ open, onOpenChange, sidebar, defaultFolder, onAd
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Add a feed</DialogTitle>
-            <DialogDescription>Paste a website and feedr finds its feed.</DialogDescription>
+            <DialogDescription>Paste a website and feedrsauros finds its feed.</DialogDescription>
           </DialogHeader>
 
           <Input
@@ -106,7 +106,7 @@ export function TransferDialog({ open, onOpenChange }: Closable) {
       <DialogContent className={panel}>
         <DialogHeader>
           <DialogTitle>Import & export</DialogTitle>
-          <DialogDescription>Move your subscriptions between feedr and other readers with an OPML file.</DialogDescription>
+          <DialogDescription>Move your subscriptions between feedrsauros and other readers with an OPML file.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2">
@@ -126,7 +126,7 @@ export function TransferDialog({ open, onOpenChange }: Closable) {
             </label>
           </Button>
           <Button variant="secondary" asChild>
-            <a href="/api/opml" download="feedr.opml">Export OPML file</a>
+            <a href="/api/opml" download="feedrsauros.opml">Export OPML file</a>
           </Button>
         </div>
 

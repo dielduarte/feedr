@@ -1,4 +1,4 @@
-use feedr::discover::feed_links;
+use feedrsauros::discover::feed_links;
 use url::Url;
 
 fn links(html: &str) -> Vec<String> {

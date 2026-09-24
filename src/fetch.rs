@@ -15,7 +15,7 @@ const MAX_REDIRECTS: usize = 10;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 
 const USER_AGENT: &str = concat!(
-    "feedr/",
+    "feedrsauros/",
     env!("CARGO_PKG_VERSION"),
     " (+https://feedrsauros.com)"
 );

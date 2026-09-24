@@ -38,8 +38,10 @@ async fn env() -> Env {
 
 impl Env {
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_feedr"));
-        command.arg("--db").arg(self.dir.path().join("feedr.db"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_feedrsauros"));
+        command
+            .arg("--db")
+            .arg(self.dir.path().join("feedrsauros.db"));
         command
     }
 
@@ -52,7 +54,7 @@ impl Env {
         let output = self.run(args).await;
         assert!(
             output.status.success(),
-            "feedr {args:?} failed: {}",
+            "feedrsauros {args:?} failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -182,8 +184,8 @@ async fn serves_on_the_host_and_port_from_the_environment() {
     let mut server = env
         .command()
         .arg("serve")
-        .env("FEEDR_HOST", "0.0.0.0")
-        .env("FEEDR_PORT", port.to_string())
+        .env("FEEDRSAUROS_HOST", "0.0.0.0")
+        .env("FEEDRSAUROS_PORT", port.to_string())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();

@@ -5,10 +5,10 @@ use axum::http::StatusCode;
 use axum::response::Html;
 use axum::routing::get;
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::add_feed::{AddFeedError, add_feed};
-use feedr::db::{Db, ItemQuery, ItemScope};
-use feedr::fetch::{FetchError, Fetcher};
-use feedr::schedule::POLL_INTERVAL;
+use feedrsauros::add_feed::{AddFeedError, add_feed};
+use feedrsauros::db::{Db, ItemQuery, ItemScope};
+use feedrsauros::fetch::{FetchError, Fetcher};
+use feedrsauros::schedule::POLL_INTERVAL;
 use tempfile::TempDir;
 use url::Url;
 
@@ -37,7 +37,7 @@ async fn env(app: Router) -> Env {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     let dir = tempfile::tempdir().unwrap();
-    let db = Db::open(&dir.path().join("feedr.db")).await.unwrap();
+    let db = Db::open(&dir.path().join("feedrsauros.db")).await.unwrap();
     Env {
         db,
         fetcher: Fetcher::new(Duration::from_secs(5)),
@@ -62,7 +62,7 @@ impl Env {
         self.base.join(path).unwrap()
     }
 
-    async fn add(&self, path: &str) -> Result<feedr::add_feed::Added, AddFeedError> {
+    async fn add(&self, path: &str) -> Result<feedrsauros::add_feed::Added, AddFeedError> {
         add_feed(&self.db, &self.fetcher, &self.url(path), None, now()).await
     }
 }
@@ -194,7 +194,7 @@ async fn reports_an_unreachable_url() {
 }
 
 mod input {
-    use feedr::add_feed::parse_input;
+    use feedrsauros::add_feed::parse_input;
 
     #[test]
     fn accepts_full_urls() {

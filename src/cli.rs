@@ -18,10 +18,10 @@ use crate::opml;
 use crate::poller::{self, BatchHealth, PollerEvent, run_batch};
 
 #[derive(Parser)]
-#[command(name = "feedr", version, about = "A local-first RSS reader")]
+#[command(name = "feedrsauros", version, about = "A local-first RSS reader")]
 pub struct Cli {
     /// Database file [default: the platform data directory]
-    #[arg(long, env = "FEEDR_DB", global = true)]
+    #[arg(long, env = "FEEDRSAUROS_DB", global = true)]
     pub db: Option<PathBuf>,
     #[command(subcommand)]
     pub command: Command,
@@ -31,11 +31,11 @@ pub struct Cli {
 pub enum Command {
     /// Run the background poller and the web API
     Serve {
-        /// Address to listen on. feedr has no login, so only expose it beyond this machine
+        /// Address to listen on. feedrsauros has no login, so only expose it beyond this machine
         /// behind something that authenticates, like a reverse proxy.
-        #[arg(long, env = "FEEDR_HOST", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
+        #[arg(long, env = "FEEDRSAUROS_HOST", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
         host: IpAddr,
-        #[arg(long, env = "FEEDR_PORT", default_value_t = 7777)]
+        #[arg(long, env = "FEEDRSAUROS_PORT", default_value_t = 7777)]
         port: u16,
         /// Open the web app in your browser
         #[arg(long)]
@@ -79,10 +79,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
 fn database_path(explicit: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     let path = match explicit {
         Some(path) => path,
-        None => ProjectDirs::from("", "", "feedr")
+        None => ProjectDirs::from("", "", "feedrsauros")
             .context("could not find a data directory; pass --db")?
             .data_dir()
-            .join("feedr.db"),
+            .join("feedrsauros.db"),
     };
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -105,7 +105,7 @@ async fn serve(db: Db, host: IpAddr, port: u16, open: bool) -> anyhow::Result<()
         .await
         .with_context(|| format!("could not listen on {host}:{port}"))?;
     let url = format!("http://{}", listener.local_addr()?);
-    println!("feedr is running at {url}");
+    println!("feedrsauros is running at {url}");
     if open && let Err(error) = open::that_detached(&url) {
         tracing::warn!(%error, "could not open a browser");
     }
@@ -169,7 +169,7 @@ async fn refresh(db: Db) -> anyhow::Result<()> {
     db.mark_due(FeedScope::All, now).await?;
     let feeds = db.feeds_due(now).await?;
     if feeds.is_empty() {
-        println!("No feeds yet. Add one with `feedr add <url>`.");
+        println!("No feeds yet. Add one with `feedrsauros add <url>`.");
         return Ok(());
     }
     let count = feeds.len() as u64;
@@ -226,7 +226,7 @@ async fn refresh(db: Db) -> anyhow::Result<()> {
 async fn list(db: Db) -> anyhow::Result<()> {
     let sidebar = db.sidebar().await?;
     if sidebar.folders.is_empty() && sidebar.uncategorized.is_empty() {
-        println!("No feeds yet. Add one with `feedr add <url>`.");
+        println!("No feeds yet. Add one with `feedrsauros add <url>`.");
         return Ok(());
     }
     for folder in &sidebar.folders {
@@ -261,7 +261,7 @@ async fn import(db: Db, file: PathBuf) -> anyhow::Result<()> {
         println!("  ignored invalid feed URL: {url}");
     }
     if report.added > 0 {
-        println!("Run `feedr refresh` or `feedr serve` to fetch them.");
+        println!("Run `feedrsauros refresh` or `feedrsauros serve` to fetch them.");
     }
     Ok(())
 }

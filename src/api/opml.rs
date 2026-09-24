@@ -14,7 +14,7 @@ pub async fn export(State(state): State<AppState>) -> Result<impl IntoResponse, 
             (header::CONTENT_TYPE, "text/x-opml; charset=utf-8"),
             (
                 header::CONTENT_DISPOSITION,
-                "attachment; filename=\"feedr.opml\"",
+                "attachment; filename=\"feedrsauros.opml\"",
             ),
         ],
         render(&sidebar),

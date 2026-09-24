@@ -3,10 +3,10 @@ use std::time::Duration;
 use axum::Router;
 use axum::response::Html;
 use axum::routing::get;
-use feedr::api::{self, AppState};
-use feedr::db::Db;
-use feedr::fetch::Fetcher;
-use feedr::poller;
+use feedrsauros::api::{self, AppState};
+use feedrsauros::db::Db;
+use feedrsauros::fetch::Fetcher;
+use feedrsauros::poller;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -51,7 +51,7 @@ async fn start() -> Api {
     )
     .await;
     let dir = tempfile::tempdir().unwrap();
-    let db = Db::open(&dir.path().join("feedr.db")).await.unwrap();
+    let db = Db::open(&dir.path().join("feedrsauros.db")).await.unwrap();
     let fetcher = Fetcher::new(Duration::from_secs(5));
     let cancel = CancellationToken::new();
     let (poller, _) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());
@@ -562,7 +562,7 @@ mod opml {
             response.headers()["content-disposition"]
                 .to_str()
                 .unwrap()
-                .contains("feedr.opml")
+                .contains("feedrsauros.opml")
         );
         let body = response.text().await.unwrap();
         assert!(body.contains(r#"text="Tech""#));

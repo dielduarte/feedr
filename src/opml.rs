@@ -6,7 +6,7 @@ use url::Url;
 use crate::add_feed::parse_input;
 use crate::db::{Db, DbError, NewFeed, Sidebar, SidebarFeed};
 
-/// A subscription list, with folders flattened to one level like feedr's own.
+/// A subscription list, with folders flattened to one level like feedrsauros's own.
 #[derive(Debug, Default)]
 pub struct Subscriptions {
     pub folders: Vec<FolderEntry>,
@@ -137,7 +137,7 @@ pub fn render(sidebar: &Sidebar) -> String {
     });
     let document = OPML {
         head: Some(Head {
-            title: Some("feedr subscriptions".to_string()),
+            title: Some("feedrsauros subscriptions".to_string()),
             ..Head::default()
         }),
         body: Body {

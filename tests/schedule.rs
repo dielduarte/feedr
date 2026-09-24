@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use chrono::{DateTime, TimeZone, Utc};
-use feedr::model::FeedId;
-use feedr::schedule::{
+use feedrsauros::model::FeedId;
+use feedrsauros::schedule::{
     Attempt, MAX_INTERVAL, MIN_INTERVAL, POLL_INTERVAL, adaptive_interval, next_fetch_at,
 };
 

@@ -18,22 +18,22 @@ COPY --from=web /src/web/dist web/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked \
-    && cp target/release/feedr /usr/local/bin/feedr
+    && cp target/release/feedrsauros /usr/local/bin/feedrsauros
 
 FROM debian:trixie-slim
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-RUN useradd --system --uid 10001 --home-dir /data feedr \
-    && mkdir /data && chown feedr /data
-COPY --from=app /usr/local/bin/feedr /usr/local/bin/feedr
+RUN useradd --system --uid 10001 --home-dir /data feedrsauros \
+    && mkdir /data && chown feedrsauros /data
+COPY --from=app /usr/local/bin/feedrsauros /usr/local/bin/feedrsauros
 
-USER feedr
-ENV FEEDR_DB=/data/feedr.db \
-    FEEDR_HOST=0.0.0.0 \
-    FEEDR_PORT=7777 \
-    RUST_LOG=feedr=info
+USER feedrsauros
+ENV FEEDRSAUROS_DB=/data/feedrsauros.db \
+    FEEDRSAUROS_HOST=0.0.0.0 \
+    FEEDRSAUROS_PORT=7777 \
+    RUST_LOG=feedrsauros=info
 VOLUME /data
 EXPOSE 7777
-ENTRYPOINT ["feedr"]
+ENTRYPOINT ["feedrsauros"]
 CMD ["serve"]
