@@ -1,5 +1,5 @@
 import { Star } from 'lucide-react'
-import { type ReactNode, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Link } from 'wouter'
 import { Button } from '@/components/ui/button'
 import { useNow } from '@/lib/hooks'
@@ -10,26 +10,22 @@ import { itemPath, type Scope } from '../routes'
 
 type Props = {
   scope: Scope
-  heading: string
-  details: ReactNode
   items: ItemSummary[]
-  loading: boolean
+  selectedId: number | null
   hasMore: boolean
   onLoadMore: () => void
-  selected: number
-  onSelect: (index: number) => void
   onToggleStar: (item: ItemSummary) => void
-  empty: ReactNode
 }
 
-export function ArticleList({ scope, heading, details, items, loading, hasMore, onLoadMore, selected, onSelect, onToggleStar, empty }: Props) {
+export function ArticleList({ scope, items, selectedId, hasMore, onLoadMore, onToggleStar }: Props) {
   const now = useNow()
   const list = useRef<HTMLOListElement>(null)
   const sentinel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    list.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [selected])
+    if (selectedId === null) return
+    list.current?.querySelector(`[data-id="${selectedId}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [selectedId])
 
   useEffect(() => {
     const node = sentinel.current
@@ -42,67 +38,81 @@ export function ArticleList({ scope, heading, details, items, loading, hasMore, 
   }, [hasMore, onLoadMore])
 
   return (
-    <div className="mx-auto max-w-190 px-8 pt-11 pb-24 max-md:px-5">
-      <header className="mb-5">
-        <h1 className="text-3xl leading-tight font-semibold tracking-[-0.022em]">{heading}</h1>
-        {details}
-      </header>
-
-      {!loading && items.length === 0 ? (
-        <div className="py-14">{empty}</div>
-      ) : (
-        <ol ref={list} className="-mx-3">
-          {items.map((item, index) => {
-            const unread = item.read_at === null
-            return (
-              <li
-                key={item.id}
-                data-index={index}
-                className="group/article relative"
-                onMouseMove={() => index !== selected && onSelect(index)}
-              >
-                <Link
-                  href={itemPath(scope, item.id)}
-                  className={cn(
-                    'flex rounded-[10px] py-3 pr-12 pl-3 focus-visible:-outline-offset-2',
-                    index === selected && 'bg-secondary',
-                  )}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className={cn('line-clamp-2 text-[15px] leading-snug font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>
-                      {unread && <span className="sr-only">Unread: </span>}
-                      {item.title ?? 'Untitled'}
-                    </span>
-                    <time dateTime={item.published_at} title={fullDate(new Date(item.published_at))} className="text-[13px] text-faint tabular-nums">
-                      {relativeTime(new Date(item.published_at), now)}
-                    </time>
-                    {item.summary && (
-                      <span className={cn('line-clamp-2 text-[13px] leading-normal', unread ? 'text-muted-foreground' : 'text-faint')}>
-                        {item.summary}
-                      </span>
-                    )}
-                  </span>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => onToggleStar(item)}
-                  aria-label={item.starred_at ? 'Unstar' : 'Star'}
-                  aria-pressed={item.starred_at !== null}
-                  className={cn(
-                    'absolute top-2.5 right-2.5 size-7 text-faint hover:text-foreground',
-                    item.starred_at ? 'text-foreground [&_svg]:fill-current' : 'opacity-0 group-hover/article:opacity-100 focus-visible:opacity-100',
-                    index === selected && 'opacity-100',
-                  )}
-                >
-                  <Star className="size-[15px]" />
-                </Button>
-              </li>
-            )
-          })}
-        </ol>
-      )}
-      {hasMore && <div ref={sentinel} className="h-px" aria-hidden />}
-    </div>
+    <>
+      <ol ref={list} className="-mx-3">
+        {items.map((item) => (
+          <ArticleRow
+            key={item.id}
+            item={item}
+            href={itemPath(scope, item.id)}
+            selected={item.id === selectedId}
+            now={now}
+            onToggleStar={onToggleStar}
+          />
+        ))}
+      </ol>
+      {hasMore ? <div ref={sentinel} className="h-px" aria-hidden /> : null}
+    </>
   )
 }
+
+type RowProps = {
+  item: ItemSummary
+  href: string
+  selected: boolean
+  now: Date
+  onToggleStar: (item: ItemSummary) => void
+}
+
+/** Memoized so marking one article read or moving the selection re-renders only the rows involved. */
+const ArticleRow = memo(function ArticleRow({ item, href, selected, now, onToggleStar }: RowProps) {
+  const unread = item.read_at === null
+  const published = new Date(item.published_at)
+
+  return (
+    <li
+      data-id={item.id}
+      // Rows far off-screen skip layout and paint until scrolled near.
+      className="group/article relative [contain-intrinsic-size:auto_112px] [content-visibility:auto]"
+    >
+      <Link
+        href={href}
+        className={cn(
+          'flex rounded-[10px] py-3 pr-12 pl-3 hover:bg-secondary focus-visible:-outline-offset-2',
+          selected && 'bg-secondary',
+        )}
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className={cn('line-clamp-2 text-[15px] leading-snug font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>
+            {unread ? <span className="sr-only">Unread: </span> : null}
+            {item.title ?? 'Untitled'}
+          </span>
+          <time dateTime={item.published_at} title={fullDate(published)} className="text-[13px] text-faint tabular-nums">
+            {relativeTime(published, now)}
+          </time>
+          {item.summary ? (
+            <span className={cn('line-clamp-2 text-[13px] leading-normal', unread ? 'text-muted-foreground' : 'text-faint')}>
+              {item.summary}
+            </span>
+          ) : null}
+        </span>
+      </Link>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        onClick={() => onToggleStar(item)}
+        aria-label={item.starred_at ? 'Unstar' : 'Star'}
+        aria-pressed={item.starred_at !== null}
+        className={cn(
+          'absolute top-2.5 right-2.5 size-7 text-faint hover:text-foreground',
+          item.starred_at
+            ? 'text-foreground [&_svg]:fill-current'
+            : 'opacity-0 group-hover/article:opacity-100 focus-visible:opacity-100',
+          selected && 'opacity-100',
+        )}
+      >
+        <Star className="size-[15px]" />
+      </Button>
+    </li>
+  )
+})

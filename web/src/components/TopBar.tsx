@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, CircleDot, Folder, Inbox, RefreshCw, Star, WifiOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -13,38 +13,23 @@ import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import type { Item, Sidebar } from '../api'
-import type { PollerStatus } from '../queries'
+import type { Chrome } from '../chrome'
+import type { Lookup } from '../lookup'
 import { scopePath, type Scope } from '../routes'
 import { FeedIcon } from './FeedIcon'
 import { IconAction } from './IconAction'
 
-type ListActions = {
-  unreadOnly: boolean
-  canFilterUnread: boolean
-  onUnreadOnlyChange: (unreadOnly: boolean) => void
-  canMarkAllRead: boolean
-  onMarkAllRead: () => void
-}
-
-type ReaderActions = {
-  item: Item | undefined
-  words: number
-  onBack: () => void
-  onToggleStar: () => void
-  onToggleRead: () => void
-}
-
 type Props = {
-  scope: Scope
-  scopeLabel: string
-  sidebar: Sidebar | undefined
-  onNavigate: (scope: Scope) => void
-  status: PollerStatus
-  onRefresh: () => void
-  view: { kind: 'list'; actions: ListActions } | { kind: 'reader'; actions: ReaderActions }
+  chrome: Chrome
+  /** Shown in place of the leading icon, e.g. to return from an article to its list. */
+  onBack?: () => void
+  /** Trailing breadcrumb after the switcher, truncated first when space runs out. */
+  crumb?: string | null
+  /** Page-specific actions, placed before the refresh control. */
+  children?: ReactNode
 }
 
-export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefresh, view }: Props) {
+export function TopBar({ chrome, onBack, crumb, children }: Props) {
   const { state, isMobile } = useSidebar()
   const sidebarHidden = state === 'collapsed' || isMobile
 
@@ -52,42 +37,50 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
-        {view.kind === 'reader' ? (
-          <IconAction label="Back to articles" shortcut="Esc" onClick={view.actions.onBack}>
+        {onBack ? (
+          <IconAction label="Back to articles" shortcut="Esc" onClick={onBack}>
             <ArrowLeft />
           </IconAction>
         ) : sidebarHidden ? (
           <SidebarTrigger className="size-8 text-muted-foreground" />
         ) : (
           <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4" aria-hidden>
-            <ScopeIcon scope={scope} sidebar={sidebar} />
+            <ScopeIcon scope={chrome.scope} lookup={chrome.lookup} />
           </span>
         )}
-        <ScopeSwitcher scope={scope} label={scopeLabel} sidebar={sidebar} onNavigate={onNavigate} />
-        {view.kind === 'reader' && view.actions.item?.title && (
-          <span className="truncate text-[13.5px] text-muted-foreground max-md:hidden">{view.actions.item.title}</span>
-        )}
+        <ScopeSwitcher scope={chrome.scope} label={chrome.label} sidebar={chrome.sidebar} onNavigate={chrome.onNavigate} />
+        {crumb ? <span className="truncate text-[13.5px] text-muted-foreground max-md:hidden">{crumb}</span> : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {view.kind === 'list' ? <ListTools {...view.actions} /> : <ReaderTools {...view.actions} />}
-        {status.offline && (
+        {children}
+        {chrome.status.offline ? (
           <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="feedrsauros can't reach the internet and will retry.">
             <WifiOff className="size-3.5" /> Offline
           </span>
-        )}
-        <IconAction label={status.refreshing ? 'Refreshing feeds' : 'Refresh feeds'} shortcut="R" onClick={onRefresh}>
-          <RefreshIcon refreshing={status.refreshing} />
+        ) : null}
+        <IconAction label={chrome.status.refreshing ? 'Refreshing feeds' : 'Refresh feeds'} shortcut="R" onClick={chrome.onRefresh}>
+          <RefreshIcon refreshing={chrome.status.refreshing} />
         </IconAction>
       </div>
     </header>
   )
 }
 
-function ListTools({ unreadOnly, canFilterUnread, onUnreadOnlyChange, canMarkAllRead, onMarkAllRead }: ListActions) {
+type ListActionsProps = {
+  unreadOnly: boolean
+  canFilterUnread: boolean
+  onUnreadOnlyChange: (unreadOnly: boolean) => void
+  canMarkAllRead: boolean
+  onMarkAllRead: () => void
+}
+
+const toggleItem = 'h-7 rounded-md px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:shadow-xs'
+
+export function ListActions({ unreadOnly, canFilterUnread, onUnreadOnlyChange, canMarkAllRead, onMarkAllRead }: ListActionsProps) {
   return (
     <>
-      {canFilterUnread && (
+      {canFilterUnread ? (
         <ToggleGroup
           type="single"
           size="sm"
@@ -96,14 +89,10 @@ function ListTools({ unreadOnly, canFilterUnread, onUnreadOnlyChange, canMarkAll
           className="mr-1 rounded-lg bg-secondary p-0.5"
           aria-label="Show"
         >
-          <ToggleGroupItem value="all" className="h-7 rounded-md px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:shadow-xs">
-            All
-          </ToggleGroupItem>
-          <ToggleGroupItem value="unread" className="h-7 rounded-md px-2.5 text-xs data-[state=on]:bg-background data-[state=on]:shadow-xs">
-            Unread
-          </ToggleGroupItem>
+          <ToggleGroupItem value="all" className={toggleItem}>All</ToggleGroupItem>
+          <ToggleGroupItem value="unread" className={toggleItem}>Unread</ToggleGroupItem>
         </ToggleGroup>
-      )}
+      ) : null}
       <IconAction label="Mark all as read" shortcut="⇧A" onClick={onMarkAllRead} disabled={!canMarkAllRead}>
         <CheckCheck />
       </IconAction>
@@ -111,15 +100,21 @@ function ListTools({ unreadOnly, canFilterUnread, onUnreadOnlyChange, canMarkAll
   )
 }
 
-function ReaderTools({ item, words, onToggleStar, onToggleRead }: ReaderActions) {
-  if (!item) return null
+type ReaderActionsProps = {
+  item: Item
+  words: number
+  onToggleStar: () => void
+  onToggleRead: () => void
+}
+
+export function ReaderActions({ item, words, onToggleStar, onToggleRead }: ReaderActionsProps) {
   return (
     <>
-      {words > 0 && (
+      {words > 0 ? (
         <span className="px-2 text-[13px] whitespace-nowrap text-muted-foreground tabular-nums max-md:hidden">
           {words.toLocaleString('en-US')} words
         </span>
-      )}
+      ) : null}
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4 max-md:hidden" />
       <IconAction label={item.starred_at ? 'Unstar' : 'Star'} shortcut="S" pressed={item.starred_at !== null} onClick={onToggleStar}>
         <Star />
@@ -127,18 +122,18 @@ function ReaderTools({ item, words, onToggleStar, onToggleRead }: ReaderActions)
       <IconAction label={item.read_at ? 'Mark as unread' : 'Mark as read'} shortcut="M" onClick={onToggleRead}>
         {item.read_at ? <Circle /> : <CircleCheck />}
       </IconAction>
-      {item.url && (
+      {item.url ? (
         <IconAction label="Open original" shortcut="V" asChild>
           <a href={item.url} target="_blank" rel="noopener noreferrer">
             <ArrowUpRight />
           </a>
         </IconAction>
-      )}
+      ) : null}
     </>
   )
 }
 
-function ScopeIcon({ scope, sidebar }: { scope: Scope; sidebar: Sidebar | undefined }) {
+function ScopeIcon({ scope, lookup }: { scope: Scope; lookup: Lookup }) {
   switch (scope.kind) {
     case 'all':
       return <Inbox />
@@ -148,10 +143,8 @@ function ScopeIcon({ scope, sidebar }: { scope: Scope; sidebar: Sidebar | undefi
       return <Star />
     case 'folder':
       return <Folder />
-    case 'feed': {
-      const feeds = [...(sidebar?.uncategorized ?? []), ...(sidebar?.folders.flatMap((f) => f.feeds) ?? [])]
-      return <FeedIcon siteUrl={feeds.find((f) => f.id === scope.id)?.site_url ?? null} />
-    }
+    case 'feed':
+      return <FeedIcon siteUrl={lookup.feed(scope.id)?.site_url ?? null} />
   }
 }
 
@@ -187,7 +180,7 @@ function ScopeSwitcher({ scope, label, sidebar, onNavigate }: SwitcherProps) {
         {option({ kind: 'all' }, 'All articles')}
         {option({ kind: 'unread' }, 'Unread')}
         {option({ kind: 'starred' }, 'Starred')}
-        {hasFeeds && <DropdownMenuSeparator />}
+        {hasFeeds ? <DropdownMenuSeparator /> : null}
         {sidebar?.folders.map((folder) => [
           option({ kind: 'folder', id: folder.id }, folder.name),
           ...folder.feeds.map((feed) => option({ kind: 'feed', id: feed.id }, feed.title, true)),
@@ -204,15 +197,15 @@ function ScopeSwitcher({ scope, label, sidebar, onNavigate }: SwitcherProps) {
  */
 function RefreshIcon({ refreshing }: { refreshing: boolean }) {
   const [spinning, setSpinning] = useState(refreshing)
+  if (refreshing && !spinning) setSpinning(true)
 
-  useEffect(() => {
-    if (refreshing) setSpinning(true)
-  }, [refreshing])
-
+  // Animating a wrapper rather than the SVG itself lets the browser composite it on the GPU.
   return (
-    <RefreshCw
-      className={cn(spinning && 'animate-spin motion-reduce:[animation-duration:3s]')}
+    <span
+      className={cn('inline-grid', spinning && 'animate-spin motion-reduce:[animation-duration:3s]')}
       onAnimationIteration={() => !refreshing && setSpinning(false)}
-    />
+    >
+      <RefreshCw />
+    </span>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 function isTyping(target: EventTarget | null): boolean {
   return (
@@ -7,10 +7,17 @@ function isTyping(target: EventTarget | null): boolean {
   )
 }
 
-/** Single-key shortcuts, ignored while typing or when a modifier other than Shift is held. */
-export function useShortcuts(bindings: Record<string, () => void>, enabled = true) {
+export type Shortcuts = Record<string, () => void>
+
+/**
+ * Single-key shortcuts, ignored while typing or when a modifier other than Shift is held. The
+ * listener is attached once; the latest bindings are read through a ref.
+ */
+export function useShortcuts(bindings: Shortcuts, enabled = true) {
   const latest = useRef(bindings)
-  latest.current = bindings
+  useEffect(() => {
+    latest.current = bindings
+  })
 
   useEffect(() => {
     if (!enabled) return
@@ -27,35 +34,6 @@ export function useShortcuts(bindings: Record<string, () => void>, enabled = tru
   }, [enabled])
 }
 
-function read<T>(key: string, fallback: T): T {
-  try {
-    const stored = localStorage.getItem(key)
-    return stored === null ? fallback : (JSON.parse(stored) as T)
-  } catch {
-    return fallback
-  }
-}
-
-/** A preference that survives reloads; storage failures just fall back to the default. */
-export function useStoredState<T>(key: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => read(key, fallback))
-  const update = useCallback(
-    (next: T | ((previous: T) => T)) => {
-      setValue((previous) => {
-        const resolved = next instanceof Function ? next(previous) : next
-        try {
-          localStorage.setItem(key, JSON.stringify(resolved))
-        } catch {
-          // Private mode or blocked storage: keep the in-memory value.
-        }
-        return resolved
-      })
-    },
-    [key],
-  )
-  return [value, update] as const
-}
-
 /** Re-renders every minute so relative times like "5m" stay current. */
 export function useNow(): Date {
   const [now, setNow] = useState(() => new Date())
@@ -64,4 +42,10 @@ export function useNow(): Date {
     return () => clearInterval(timer)
   }, [])
   return now
+}
+
+export function useDocumentTitle(title: string, unread: number) {
+  useEffect(() => {
+    document.title = `${unread > 0 ? `(${unread}) ` : ''}${title} — feedrsauros`
+  }, [title, unread])
 }

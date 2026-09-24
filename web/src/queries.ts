@@ -6,44 +6,50 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { toast } from 'sonner'
-import { api, type Item, type ItemSummary, type Page, type PollerEvent, type Sidebar } from './api'
+import { api, type Item, type ItemSummary, type Page, type Sidebar } from './api'
+import { sentence } from './format'
+import { buildLookup } from './lookup'
 import { scopePath, type Scope } from './routes'
 
 export const keys = {
   sidebar: ['sidebar'] as const,
+  allItems: ['items'] as const,
   items: (scope: Scope, unreadOnly: boolean) => ['items', scopePath(scope), unreadOnly] as const,
+  allItem: ['item'] as const,
   item: (id: number) => ['item', id] as const,
 }
 
-export function useSidebar() {
+export function useSidebarData() {
   return useQuery({ queryKey: keys.sidebar, queryFn: api.sidebar })
 }
 
+export function useLookup(sidebar: Sidebar | undefined) {
+  return useMemo(() => buildLookup(sidebar), [sidebar])
+}
+
 export function useItems(scope: Scope, unreadOnly: boolean) {
-  return useInfiniteQuery({
+  const query = useInfiniteQuery({
     queryKey: keys.items(scope, unreadOnly),
     queryFn: ({ pageParam }) => api.items(scope, unreadOnly, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
   })
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data])
+  return { ...query, items }
 }
 
-export function useItem(id: number | null) {
-  return useQuery({
-    queryKey: keys.item(id ?? 0),
-    queryFn: () => api.item(id!),
-    enabled: id !== null,
-  })
+export function useItem(id: number) {
+  return useQuery({ queryKey: keys.item(id), queryFn: () => api.item(id) })
 }
 
 type Snapshot = [readonly unknown[], unknown][]
 
 function snapshot(client: QueryClient): Snapshot {
   return [
-    ...client.getQueriesData({ queryKey: ['items'] }),
-    ...client.getQueriesData({ queryKey: ['item'] }),
+    ...client.getQueriesData({ queryKey: keys.allItems }),
+    ...client.getQueriesData({ queryKey: keys.allItem }),
     ...client.getQueriesData({ queryKey: keys.sidebar }),
   ]
 }
@@ -53,7 +59,7 @@ function restore(client: QueryClient, saved: Snapshot) {
 }
 
 function patchItem(client: QueryClient, id: number, patch: Partial<ItemSummary>) {
-  client.setQueriesData<InfiniteData<Page>>({ queryKey: ['items'] }, (data) =>
+  client.setQueriesData<InfiniteData<Page>>({ queryKey: keys.allItems }, (data) =>
     data && {
       ...data,
       pages: data.pages.map((page) => ({
@@ -82,14 +88,15 @@ function adjustUnread(client: QueryClient, feedId: number, delta: number) {
   })
 }
 
+export type ItemPatch = { read?: boolean; starred?: boolean }
+
 /** Read and star changes apply everywhere at once, and roll back if the server refuses. */
 export function useUpdateItem() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ item, patch }: { item: ItemSummary; patch: { read?: boolean; starred?: boolean } }) =>
-      api.updateItem(item.id, patch),
+    mutationFn: ({ item, patch }: { item: ItemSummary; patch: ItemPatch }) => api.updateItem(item.id, patch),
     onMutate: async ({ item, patch }) => {
-      await client.cancelQueries({ queryKey: ['items'] })
+      await client.cancelQueries({ queryKey: keys.allItems })
       const saved = snapshot(client)
       const now = new Date().toISOString()
       if (patch.read !== undefined && patch.read !== (item.read_at !== null)) {
@@ -106,7 +113,7 @@ export function useUpdateItem() {
       toast.error(sentence(error.message))
     },
     onSettled: () => client.invalidateQueries({ queryKey: keys.sidebar }),
-  })
+  }).mutate
 }
 
 export function useMarkAllRead() {
@@ -115,10 +122,11 @@ export function useMarkAllRead() {
     mutationFn: ({ scope, upTo }: { scope: Scope; upTo: number }) => api.markRead(scope, upTo),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: keys.sidebar })
-      client.invalidateQueries({ queryKey: ['items'] })
-      client.invalidateQueries({ queryKey: ['item'] })
+      client.invalidateQueries({ queryKey: keys.allItems })
+      client.invalidateQueries({ queryKey: keys.allItem })
     },
-  })
+    onError: (error) => toast.error(sentence(error.message)),
+  }).mutate
 }
 
 /**
@@ -132,99 +140,24 @@ export function useSidebarMutation<Args, Result>(run: (args: Args) => Promise<Re
     onError: (error) => !inlineErrors && toast.error(sentence(error.message)),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: keys.sidebar })
-      client.invalidateQueries({ queryKey: ['items'] })
+      client.invalidateQueries({ queryKey: keys.allItems })
     },
   })
 }
 
-export type PollerStatus = { refreshing: boolean; offline: boolean }
-
-/** How long a requested refresh may wait for the server to start before we stop showing it. */
-const REFRESH_START_TIMEOUT = 10_000
-/** One full turn of the spin animation, so even an instant refresh is visibly acknowledged. */
-const MIN_REFRESH_DISPLAY = 1_000
-
-/**
- * Follows the server's poller over SSE, refreshes what's on screen as feeds update, and
- * reports whether a refresh is in progress, including one just requested from here.
- */
-export function usePoller() {
-  const client = useQueryClient()
-  const [status, setStatus] = useState<PollerStatus>({ refreshing: false, offline: false })
-  const startTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const stopTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const shownSince = useRef(0)
-
-  const showRefreshing = useCallback(() => {
-    clearTimeout(stopTimeout.current)
-    setStatus((s) => {
-      if (!s.refreshing) shownSince.current = performance.now()
-      return { ...s, refreshing: true }
-    })
-  }, [])
-
-  const hideRefreshing = useCallback((offline?: boolean) => {
-    const remaining = MIN_REFRESH_DISPLAY - (performance.now() - shownSince.current)
-    clearTimeout(stopTimeout.current)
-    stopTimeout.current = setTimeout(
-      () => setStatus((s) => ({ refreshing: false, offline: offline ?? s.offline })),
-      Math.max(0, remaining),
-    )
-  }, [])
-
-  useEffect(() => {
-    const source = new EventSource('/api/events')
-    source.onmessage = (message) => {
-      const event: PollerEvent = JSON.parse(message.data)
-      switch (event.type) {
-        case 'batch_started':
-          clearTimeout(startTimeout.current)
-          showRefreshing()
-          break
-        case 'feed_refreshed':
-        case 'feed_failed':
-          client.invalidateQueries({ queryKey: keys.sidebar })
-          break
-        case 'batch_finished':
-          hideRefreshing(event.health === 'offline')
-          client.invalidateQueries({ queryKey: keys.sidebar })
-          client.invalidateQueries({ queryKey: ['items'] })
-          break
-        case 'resync':
-          client.invalidateQueries()
-          break
-      }
-    }
-    return () => {
-      source.close()
-      clearTimeout(startTimeout.current)
-      clearTimeout(stopTimeout.current)
-    }
-  }, [client, showRefreshing, hideRefreshing])
-
-  // Shows progress from the click, before the server's batch begins; stops if nothing was due
-  // or the server never picks it up.
-  const refresh = useCallback(async (scope: Scope) => {
-    const stop = () => hideRefreshing()
-    showRefreshing()
-    clearTimeout(startTimeout.current)
-    startTimeout.current = setTimeout(stop, REFRESH_START_TIMEOUT)
-    try {
-      const { scheduled } = await api.refresh(scope)
-      if (scheduled === 0) {
-        clearTimeout(startTimeout.current)
-        stop()
-      }
-    } catch (error) {
-      clearTimeout(startTimeout.current)
-      stop()
-      toast.error(sentence((error as Error).message))
-    }
-  }, [showRefreshing, hideRefreshing])
-
-  return { status, refresh }
-}
-
-function sentence(text: string) {
-  return text.charAt(0).toUpperCase() + text.slice(1)
+/** Every sidebar edit, as stable functions safe to pass to memoized components. */
+export function useSubscriptionActions() {
+  const moveFeed = useSidebarMutation((a: { id: number; folderId: number | null; index: number }) =>
+    api.moveFeed(a.id, a.folderId, a.index),
+  ).mutate
+  const moveFolder = useSidebarMutation((a: { id: number; index: number }) => api.moveFolder(a.id, a.index)).mutate
+  const renameFeed = useSidebarMutation((a: { id: number; title: string | null }) => api.renameFeed(a.id, a.title)).mutate
+  const renameFolder = useSidebarMutation((a: { id: number; name: string }) => api.renameFolder(a.id, a.name)).mutate
+  const createFolder = useSidebarMutation((name: string) => api.createFolder(name)).mutate
+  const unsubscribe = useSidebarMutation((id: number) => api.unsubscribe(id)).mutate
+  const deleteFolder = useSidebarMutation((id: number) => api.deleteFolder(id)).mutate
+  return useMemo(
+    () => ({ moveFeed, moveFolder, renameFeed, renameFolder, createFolder, unsubscribe, deleteFolder }),
+    [moveFeed, moveFolder, renameFeed, renameFolder, createFolder, unsubscribe, deleteFolder],
+  )
 }

@@ -30,3 +30,8 @@ export function wordCount(html: string): number {
 export function readingMinutes(words: number): number {
   return Math.max(1, Math.round(words / WORDS_PER_MINUTE))
 }
+
+/** Server messages are lowercase fragments; this makes them read as sentences in the UI. */
+export function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}

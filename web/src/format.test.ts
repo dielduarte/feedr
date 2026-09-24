@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fullDate, readingMinutes, relativeTime, wordCount } from './format'
+import { fullDate, readingMinutes, relativeTime, sentence, wordCount } from './format'
 
 const now = new Date('2026-09-23T12:00:00Z')
 const ago = (ms: number) => new Date(now.getTime() - ms)
@@ -43,5 +43,12 @@ describe('reading stats', () => {
   it('rounds reading time to whole minutes, at least one', () => {
     expect(readingMinutes(10)).toBe(1)
     expect(readingMinutes(1150)).toBe(5)
+  })
+})
+
+describe('sentence', () => {
+  it('capitalises the first letter of server messages', () => {
+    expect(sentence('already subscribed to this feed')).toBe('Already subscribed to this feed')
+    expect(sentence('')).toBe('')
   })
 })
