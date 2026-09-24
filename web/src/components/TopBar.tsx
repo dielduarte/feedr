@@ -50,7 +50,7 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
 
   return (
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
         {view.kind === 'reader' ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={view.actions.onBack}>
@@ -69,7 +69,7 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {view.kind === 'list' ? <ListTools {...view.actions} /> : <ReaderTools {...view.actions} />}
         {status.offline && (
           <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground" title="feedrsauros can't reach the internet and will retry.">
@@ -116,7 +116,7 @@ function ReaderTools({ item, words, onToggleStar, onToggleRead }: ReaderActions)
   return (
     <>
       {words > 0 && (
-        <span className="px-2 text-[13px] text-muted-foreground tabular-nums max-md:hidden">
+        <span className="px-2 text-[13px] whitespace-nowrap text-muted-foreground tabular-nums max-md:hidden">
           {words.toLocaleString('en-US')} words
         </span>
       )}
@@ -178,7 +178,7 @@ function ScopeSwitcher({ scope, label, sidebar, onNavigate }: SwitcherProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary" size="sm" className="h-7.5 gap-1.5 px-2.5 text-[13.5px] font-normal">
+        <Button variant="secondary" size="sm" className="h-7.5 shrink-0 gap-1.5 px-2.5 text-[13.5px] font-normal">
           {label}
           <ChevronDown className="size-3.5" />
         </Button>
