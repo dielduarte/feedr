@@ -50,19 +50,15 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
   return (
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
       <div className="flex min-w-0 items-center gap-2">
-        {sidebarHidden && <SidebarTrigger className="text-muted-foreground" />}
-        {/* One fixed-size slot for both views, so the switcher never shifts when an article opens. */}
+        {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
         {view.kind === 'reader' ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={view.actions.onBack}>
             <ArrowLeft />
           </IconAction>
+        ) : sidebarHidden ? (
+          <SidebarTrigger className="size-8 text-muted-foreground" />
         ) : (
-          // Next to the sidebar button the icon would read as a second control, so it steps aside
-          // while still holding its space.
-          <span
-            className={cn('grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4', sidebarHidden && 'invisible')}
-            aria-hidden
-          >
+          <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4" aria-hidden>
             <ScopeIcon scope={scope} sidebar={sidebar} />
           </span>
         )}
