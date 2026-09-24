@@ -275,9 +275,7 @@
       /* Install */
 
       .install {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 24px;
+        max-width: 640px;
         margin-top: 44px;
       }
 
@@ -336,17 +334,6 @@
         background: rgb(255 255 255 / 0.18);
       }
 
-      .note {
-        max-width: 70ch;
-        margin: 28px 0 0;
-        padding: 16px 20px;
-        border-left: 3px solid var(--green);
-        border-radius: 0 10px 10px 0;
-        background: #fff;
-        color: var(--muted);
-        font-size: 15px;
-      }
-
       code {
         font-family: ui-monospace, 'SF Mono', Menlo, monospace;
         font-size: 0.9em;
@@ -397,10 +384,6 @@
 
         .features {
           grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .install {
-          grid-template-columns: minmax(0, 1fr);
         }
 
         section {
@@ -530,41 +513,23 @@
         <section id="install" aria-labelledby="install-title">
           <h2 id="install-title">Up and running in a minute.</h2>
           <p class="lede">
-            feedrsauros is a single program with the app built in. Run it with Docker, or build it from source.
+            Run it on your own computer, or self-host it on a home server or a small VPS. It's one container, and your
+            feeds never leave the machine it runs on.
           </p>
 
           <div class="install">
             <article>
               <h3>With Docker</h3>
-              <p>Clone the repository and start it. Your feeds are kept in a Docker volume.</p>
+              <p>Clone the repository and start it. Your subscriptions and articles are kept in a Docker volume.</p>
               <div class="code">
                 <pre><code>git clone https://github.com/dielduarte/feedrsauros.git
 cd feedrsauros
 docker compose up -d</code></pre>
                 <button class="copy" type="button">Copy</button>
               </div>
-              <p>Then open <a href="http://127.0.0.1:7777">127.0.0.1:7777</a>.</p>
-            </article>
-
-            <article>
-              <h3>From source</h3>
-              <p>Needs Rust and pnpm. Installs the <code>feedrsauros</code> command.</p>
-              <div class="code">
-                <pre><code>pnpm --dir web install
-pnpm --dir web build
-cargo install --path .
-feedrsauros serve --open</code></pre>
-                <button class="copy" type="button">Copy</button>
-              </div>
-              <p>Your browser opens with feedrsauros ready to add feeds.</p>
+              <p>Then open <a href="http://127.0.0.1:7777">127.0.0.1:7777</a> and add your first feed.</p>
             </article>
           </div>
-
-          <p class="note">
-            feedrsauros has no login, so it only listens on your own machine by default. To read from your phone, put it
-            behind a VPN or a reverse proxy with a password. The
-            <a href="https://github.com/dielduarte/feedrsauros#reaching-it-from-other-devices">README</a> shows how.
-          </p>
         </section>
       </main>
 
