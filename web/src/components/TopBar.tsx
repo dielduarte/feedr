@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, Star, WifiOff } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, CircleDot, Folder, Inbox, Star, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import type { Item, Sidebar } from '../api'
 import type { PollerStatus } from '../queries'
 import { scopePath, type Scope } from '../routes'
+import { FeedIcon } from './FeedIcon'
 import { IconAction } from './IconAction'
 
 type ListActions = {
@@ -49,10 +50,15 @@ export function TopBar({ scope, scopeLabel, sidebar, onNavigate, status, onRefre
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b px-3">
       <div className="flex min-w-0 items-center gap-2">
         {(state === 'collapsed' || isMobile) && <SidebarTrigger className="text-muted-foreground" />}
-        {view.kind === 'reader' && (
+        {/* One fixed-size slot for both views, so the switcher never shifts when an article opens. */}
+        {view.kind === 'reader' ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={view.actions.onBack}>
             <ArrowLeft />
           </IconAction>
+        ) : (
+          <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4" aria-hidden>
+            <ScopeIcon scope={scope} sidebar={sidebar} />
+          </span>
         )}
         <ScopeSwitcher scope={scope} label={scopeLabel} sidebar={sidebar} onNavigate={onNavigate} />
         {view.kind === 'reader' && view.actions.item?.title && (
@@ -132,6 +138,23 @@ function ReaderTools({ item, words, onToggleStar, onToggleRead }: ReaderActions)
       )}
     </>
   )
+}
+
+function ScopeIcon({ scope, sidebar }: { scope: Scope; sidebar: Sidebar | undefined }) {
+  switch (scope.kind) {
+    case 'all':
+      return <Inbox />
+    case 'unread':
+      return <CircleDot />
+    case 'starred':
+      return <Star />
+    case 'folder':
+      return <Folder />
+    case 'feed': {
+      const feeds = [...(sidebar?.uncategorized ?? []), ...(sidebar?.folders.flatMap((f) => f.feeds) ?? [])]
+      return <FeedIcon siteUrl={feeds.find((f) => f.id === scope.id)?.site_url ?? null} />
+    }
+  }
 }
 
 type SwitcherProps = {
