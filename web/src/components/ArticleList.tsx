@@ -69,7 +69,7 @@ export function ArticleList({ scope, heading, details, items, loading, hasMore, 
                   )}
                 >
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className={cn('text-[15px] leading-snug font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>
+                    <span className={cn('line-clamp-2 text-[15px] leading-snug font-medium', unread ? 'text-foreground' : 'text-muted-foreground')}>
                       {unread && <span className="sr-only">Unread: </span>}
                       {item.title ?? 'Untitled'}
                     </span>
