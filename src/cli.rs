@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -31,7 +31,11 @@ pub struct Cli {
 pub enum Command {
     /// Run the background poller and the web API
     Serve {
-        #[arg(long, default_value_t = 7777)]
+        /// Address to listen on. feedr has no login, so only expose it beyond this machine
+        /// behind something that authenticates, like a reverse proxy.
+        #[arg(long, env = "FEEDR_HOST", default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
+        host: IpAddr,
+        #[arg(long, env = "FEEDR_PORT", default_value_t = 7777)]
         port: u16,
         /// Open the web app in your browser
         #[arg(long)]
@@ -60,7 +64,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("could not open {}", path.display()))?;
     match cli.command {
-        Command::Serve { port, open } => serve(db, port, open).await,
+        Command::Serve { host, port, open } => serve(db, host, port, open).await,
         Command::Add { url, folder } => add(db, &url, folder).await,
         Command::Refresh => refresh(db).await,
         Command::Ls => list(db).await,
@@ -93,13 +97,13 @@ fn plural(count: impl Into<u64>, word: &str) -> String {
     }
 }
 
-async fn serve(db: Db, port: u16, open: bool) -> anyhow::Result<()> {
+async fn serve(db: Db, host: IpAddr, port: u16, open: bool) -> anyhow::Result<()> {
     let fetcher = Fetcher::new(DEFAULT_TIMEOUT);
     let cancel = CancellationToken::new();
     let (poller, poller_task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());
-    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+    let listener = tokio::net::TcpListener::bind((host, port))
         .await
-        .with_context(|| format!("could not listen on port {port}"))?;
+        .with_context(|| format!("could not listen on {host}:{port}"))?;
     let url = format!("http://{}", listener.local_addr()?);
     println!("feedr is running at {url}");
     if open && let Err(error) = open::that_detached(&url) {

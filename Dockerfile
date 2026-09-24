@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# The web app is embedded into the binary, so it's built first.
+FROM node:24-slim AS web
+WORKDIR /src/web
+RUN npm install --global pnpm@11
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
+
+FROM rust:1.98-slim-trixie AS app
+WORKDIR /src
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY migrations migrations
+COPY src src
+COPY --from=web /src/web/dist web/dist
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked \
+    && cp target/release/feedr /usr/local/bin/feedr
+
+FROM debian:trixie-slim
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --uid 10001 --home-dir /data feedr \
+    && mkdir /data && chown feedr /data
+COPY --from=app /usr/local/bin/feedr /usr/local/bin/feedr
+
+USER feedr
+ENV FEEDR_DB=/data/feedr.db \
+    FEEDR_HOST=0.0.0.0 \
+    FEEDR_PORT=7777 \
+    RUST_LOG=feedr=info
+VOLUME /data
+EXPOSE 7777
+ENTRYPOINT ["feedr"]
+CMD ["serve"]

@@ -1,0 +1,15 @@
+services:
+  feedr:
+    build: .
+    image: feedr
+    restart: unless-stopped
+    init: true
+    ports:
+      # Reachable from this machine only: feedr has no login. To use it from other devices,
+      # put it behind a reverse proxy that adds authentication (see README).
+      - "127.0.0.1:${FEEDR_PORT:-7777}:7777"
+    volumes:
+      - feedr-data:/data
+
+volumes:
+  feedr-data:

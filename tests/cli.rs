@@ -171,3 +171,33 @@ async fn serves_the_api_and_shuts_down_cleanly_with_clients_connected() {
         .unwrap();
     assert!(status.success());
 }
+
+#[tokio::test]
+async fn serves_on_the_host_and_port_from_the_environment() {
+    let env = env().await;
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let mut server = env
+        .command()
+        .arg("serve")
+        .env("FEEDR_HOST", "0.0.0.0")
+        .env("FEEDR_PORT", port.to_string())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut lines = BufReader::new(server.stdout.take().unwrap()).lines();
+
+    let banner = lines.next_line().await.unwrap().unwrap();
+
+    assert!(
+        banner.ends_with(&format!("http://0.0.0.0:{port}")),
+        "{banner}"
+    );
+    let sidebar = reqwest::get(format!("http://127.0.0.1:{port}/api/sidebar"))
+        .await
+        .unwrap();
+    assert_eq!(sidebar.status(), StatusCode::OK);
+    server.kill().await.unwrap();
+}
