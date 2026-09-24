@@ -1,5 +1,5 @@
 import type { Sidebar } from './api'
-import type { Shortcuts } from './lib/hooks'
+import type { Shortcuts } from './hooks/use-shortcuts'
 import type { Lookup } from './lookup'
 import type { PollerStatus } from './poller'
 import type { Scope } from './routes'

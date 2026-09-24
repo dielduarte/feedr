@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useDocumentTitle, useShortcuts } from '@/lib/hooks'
+import { useDocumentTitle } from '@/hooks/use-document-title'
+import { useShortcuts } from '@/hooks/use-shortcuts'
 import { type ItemSummary, listsUnreadOnly } from '../api'
 import type { Chrome } from '../chrome'
 import { ArticleList } from '../components/ArticleList'

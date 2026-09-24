@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useMemo, useState } from 'react'
 import { useLocation } from 'wouter'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar'
-import { useStoredState } from '@/lib/storage'
+import { useStoredState } from '@/hooks/use-stored-state'
 import { listsUnreadOnly } from './api'
 import type { Chrome } from './chrome'
 import { AddFeedDialog, type DialogName, ShortcutsDialog, TransferDialog, usePreloadDialogs } from './components/dialogs'

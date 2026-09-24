@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 function isTyping(target: EventTarget | null): boolean {
   return (
@@ -32,20 +32,4 @@ export function useShortcuts(bindings: Shortcuts, enabled = true) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [enabled])
-}
-
-/** Re-renders every minute so relative times like "5m" stay current. */
-export function useNow(): Date {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-  return now
-}
-
-export function useDocumentTitle(title: string, unread: number) {
-  useEffect(() => {
-    document.title = `${unread > 0 ? `(${unread}) ` : ''}${title} — feedrsauros`
-  }, [title, unread])
 }

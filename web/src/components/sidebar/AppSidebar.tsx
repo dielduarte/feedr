@@ -15,7 +15,7 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { useStoredState } from '@/lib/storage'
+import { useStoredState } from '@/hooks/use-stored-state'
 import { cn } from '@/lib/utils'
 import { api, type Sidebar as SidebarData, type SidebarFeed, type SidebarFolder } from '../../api'
 import { useSubscriptionActions } from '../../queries'

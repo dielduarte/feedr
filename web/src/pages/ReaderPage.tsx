@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useDocumentTitle, useShortcuts } from '@/lib/hooks'
+import { useDocumentTitle } from '@/hooks/use-document-title'
+import { useShortcuts } from '@/hooks/use-shortcuts'
 import type { Chrome } from '../chrome'
 import { Reader } from '../components/Reader'
 import { ReaderActions, TopBar } from '../components/TopBar'
