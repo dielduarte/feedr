@@ -17,6 +17,7 @@ import { type ArticleRef, articleKey, scopePath, type Scope } from './routes'
 
 export const keys = {
   sidebar: ['sidebar'] as const,
+  poller: ['poller'] as const,
   allItems: ['items'] as const,
   items: (scope: Scope, unreadOnly: boolean) => ['items', scopePath(scope), unreadOnly] as const,
   allItem: ['item'] as const,

@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/sidebar'
 import { useStoredState } from '@/hooks/use-stored-state'
 import { cn } from '@/lib/utils'
-import { api, type Sidebar as SidebarData, type SidebarFeed, type SidebarFolder } from '../../api'
+import type { Sidebar as SidebarData, SidebarFeed, SidebarFolder } from '../../api'
+import { useRefresh } from '../../poller'
 import { useSubscriptionActions } from '../../queries'
 import { scopePath, type Scope } from '../../routes'
 import type { DialogName } from '../dialogs'
@@ -44,6 +45,7 @@ const isActive = (current: Scope, candidate: Scope) => scopePath(current) === sc
 /** Memoized: it only depends on the sidebar data and where you are, not on the article list. */
 export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate, onOpenDialog, onRenamed }: Props) {
   const actions = useSubscriptionActions()
+  const refresh = useRefresh()
   const [collapsed, setCollapsed] = useStoredState<string[]>('collapsedFolders', [])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
@@ -87,6 +89,7 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
         }
         setRenaming(null)
       }}
+      onRefresh={() => refresh({ kind: 'feed', slug: feed.slug })}
       onRemove={() => setRemoval({ kind: 'feed', feed })}
     />
   )
@@ -169,6 +172,7 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
                       }
                       setRenaming(null)
                     }}
+                    onRefresh={() => refresh({ kind: 'folder', slug: folder.slug })}
                     onRemove={() => setRemoval({ kind: 'folder', folder })}
                   >
                     {folder.feeds.map((feed) => feedRow(feed, folder.slug, folder.feeds))}
@@ -247,10 +251,11 @@ type FeedRowProps = {
   onOpen: () => void
   onRename: () => void
   onRenamed: (title: string | undefined) => void
+  onRefresh: () => void
   onRemove: () => void
 }
 
-function FeedRow({ feed, nested, active, renaming, dropBefore, dragProps, onOpen, onRename, onRenamed, onRemove }: FeedRowProps) {
+function FeedRow({ feed, nested, active, renaming, dropBefore, dragProps, onOpen, onRename, onRenamed, onRefresh, onRemove }: FeedRowProps) {
   return (
     <SidebarMenuItem className={cn(nested && 'pl-4', dropBefore && dropLine)} draggable={!renaming && !feed.pending} {...dragProps}>
       {feed.pending ? (
@@ -271,7 +276,7 @@ function FeedRow({ feed, nested, active, renaming, dropBefore, dragProps, onOpen
           <RowMenu
             label={feed.title}
             onRename={onRename}
-            onRefresh={() => api.refresh({ kind: 'feed', slug: feed.slug })}
+            onRefresh={onRefresh}
             destructiveLabel="Unsubscribe…"
             onDestroy={onRemove}
           />
@@ -293,12 +298,13 @@ type FolderRowsProps = {
   onToggle: () => void
   onRename: () => void
   onRenamed: (name: string | undefined) => void
+  onRefresh: () => void
   onRemove: () => void
   /** The folder's feed rows, shown while it's open. */
   children: ReactNode
 }
 
-function FolderRows({ folder, open, active, renaming, dropBefore, dropInto, dragProps, onOpen, onToggle, onRename, onRenamed, onRemove, children }: FolderRowsProps) {
+function FolderRows({ folder, open, active, renaming, dropBefore, dropInto, dragProps, onOpen, onToggle, onRename, onRenamed, onRefresh, onRemove, children }: FolderRowsProps) {
   return (
     <>
       <SidebarMenuItem className={cn(dropBefore && dropLine)} draggable={!renaming} {...dragProps}>
@@ -322,7 +328,7 @@ function FolderRows({ folder, open, active, renaming, dropBefore, dropInto, drag
             <RowMenu
               label={folder.name}
               onRename={onRename}
-              onRefresh={() => api.refresh({ kind: 'folder', slug: folder.slug })}
+              onRefresh={onRefresh}
               destructiveLabel="Delete folder…"
               onDestroy={onRemove}
             />

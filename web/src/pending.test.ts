@@ -17,6 +17,7 @@ describe('pending feeds', () => {
     expect(isPendingSlug(slug)).toBe(true)
     expect(isPendingSlug('rust-blog')).toBe(false)
     expect(pendingSlug()).not.toBe(slug)
+    expect(slug).toMatch(/^[~a-z0-9-]+$/)
   })
 
   it('are named after the site being added', () => {

@@ -10,7 +10,7 @@ import { AppSidebar } from './components/sidebar/AppSidebar'
 import { scopeLabel } from './lookup'
 import { ListPage } from './pages/ListPage'
 import { ReaderPage } from './pages/ReaderPage'
-import { usePoller } from './poller'
+import { usePollerStatus, useRefresh, useServerEvents } from './poller'
 import { sentence } from './format'
 import { hostOf, pendingSlug } from './pending'
 import { useAddFeed, useLookup, useSidebarData } from './queries'
@@ -43,7 +43,9 @@ function Shell() {
   const [addDraft, setAddDraft] = useState<{ url: string; folder: string | null } | null>(null)
   const addFeed = useAddFeed()
   const [lastOpenedKey, setLastOpenedKey] = useState<string | null>(null)
-  const { status, refresh } = usePoller()
+  useServerEvents()
+  const status = usePollerStatus()
+  const refresh = useRefresh()
   const { data: sidebar } = useSidebarData()
   const lookup = useLookup(sidebar)
   usePreloadDialogs()

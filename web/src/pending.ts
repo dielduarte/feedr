@@ -2,12 +2,10 @@ import type { Sidebar, SidebarFeed } from './api'
 
 // Real slugs only contain a-z, 0-9 and "-", so this prefix can never collide with one.
 const PREFIX = '~adding-'
-let counter = 0
 
 /** A temporary slug for a feed that's still being added. */
 export function pendingSlug(): string {
-  counter += 1
-  return `${PREFIX}${counter}`
+  return `${PREFIX}${Math.random().toString(36).slice(2)}`
 }
 
 export function isPendingSlug(slug: string): boolean {
