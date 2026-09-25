@@ -1,25 +1,26 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::{ApiError, AppState};
-use crate::db::{Cursor, Item, ItemQuery, ItemScope, ItemSummary};
-use crate::model::{FeedId, FolderId, ItemId};
+use crate::db::{Cursor, Db, Item, ItemQuery, ItemScope, ItemSummary};
+use crate::model::ItemId;
 
 const DEFAULT_LIMIT: u32 = 50;
 const MAX_LIMIT: u32 = 200;
 
-fn scope(
-    feed: Option<FeedId>,
-    folder: Option<FolderId>,
+async fn scope(
+    db: &Db,
+    feed: Option<String>,
+    folder: Option<String>,
     starred: Option<bool>,
 ) -> Result<ItemScope, ApiError> {
     match (feed, folder, starred.unwrap_or(false)) {
         (None, None, false) => Ok(ItemScope::All),
-        (Some(feed), None, false) => Ok(ItemScope::Feed(feed)),
-        (None, Some(folder), false) => Ok(ItemScope::Folder(folder)),
+        (Some(feed), None, false) => Ok(ItemScope::Feed(db.feed_id(&feed).await?)),
+        (None, Some(folder), false) => Ok(ItemScope::Folder(db.folder_id(&folder).await?)),
         (None, None, true) => Ok(ItemScope::Starred),
         _ => Err(ApiError::BadRequest(
             "choose one of feed, folder or starred".into(),
@@ -27,7 +28,7 @@ fn scope(
     }
 }
 
-/// Opaque to clients: `<published_at seconds>_<item id>`.
+/// Opaque to clients: `<published_at seconds>_<internal id>`.
 fn encode_cursor(cursor: Cursor) -> String {
     format!("{}_{}", cursor.published_at.timestamp(), cursor.id.0)
 }
@@ -45,8 +46,8 @@ fn decode_cursor(raw: &str) -> Result<Cursor, ApiError> {
 // Flat on purpose: serde's `flatten` breaks number parsing for query strings.
 #[derive(Deserialize)]
 pub struct ListQuery {
-    feed: Option<FeedId>,
-    folder: Option<FolderId>,
+    feed: Option<String>,
+    folder: Option<String>,
     starred: Option<bool>,
     unread: Option<bool>,
     cursor: Option<String>,
@@ -66,7 +67,7 @@ pub async fn list(
     let page = state
         .db
         .list_items(ItemQuery {
-            scope: scope(query.feed, query.folder, query.starred)?,
+            scope: scope(&state.db, query.feed, query.folder, query.starred).await?,
             unread_only: query.unread.unwrap_or(false),
             cursor: query.cursor.as_deref().map(decode_cursor).transpose()?,
             limit: query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT),
@@ -80,8 +81,9 @@ pub async fn list(
 
 pub async fn open(
     State(state): State<AppState>,
-    Path(id): Path<ItemId>,
+    Path((feed, item)): Path<(String, String)>,
 ) -> Result<Json<Item>, ApiError> {
+    let id = state.db.item_id(&feed, &item).await?;
     Ok(Json(state.db.get_item(id).await?))
 }
 
@@ -93,9 +95,10 @@ pub struct Update {
 
 pub async fn update(
     State(state): State<AppState>,
-    Path(id): Path<ItemId>,
+    Path((feed, item)): Path<(String, String)>,
     Json(body): Json<Update>,
 ) -> Result<StatusCode, ApiError> {
+    let id = state.db.item_id(&feed, &item).await?;
     if let Some(read) = body.read {
         state.db.set_read(id, read).await?;
     }
@@ -107,11 +110,11 @@ pub async fn update(
 
 #[derive(Deserialize)]
 pub struct MarkRead {
-    feed: Option<FeedId>,
-    folder: Option<FolderId>,
+    feed: Option<String>,
+    folder: Option<String>,
     starred: Option<bool>,
-    /// The newest item the reader has seen; anything fetched after it stays unread.
-    up_to: ItemId,
+    /// The newest `fetched_at` the reader has seen; anything stored after it stays unread.
+    seen_until: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -123,7 +126,7 @@ pub async fn mark_read(
     State(state): State<AppState>,
     Json(body): Json<MarkRead>,
 ) -> Result<Json<Marked>, ApiError> {
-    let scope = scope(body.feed, body.folder, body.starred)?;
-    let marked = state.db.mark_read(scope, body.up_to).await?;
+    let scope = scope(&state.db, body.feed, body.folder, body.starred).await?;
+    let marked = state.db.mark_read(scope, body.seen_until).await?;
     Ok(Json(Marked { marked }))
 }

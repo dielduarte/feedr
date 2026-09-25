@@ -577,44 +577,6 @@ mod items {
     }
 
     #[tokio::test]
-    async fn mark_read_spares_items_that_arrived_after_the_user_looked() {
-        let t = open().await;
-        let feed = feed_with_items(
-            &t.db,
-            "https://a.com/feed",
-            vec![item("1", at(1)), item("2", at(2))],
-        )
-        .await;
-        let seen = t.db.list_items(query(ItemScope::All)).await.unwrap().items[0].id;
-        t.db.record_fetch(
-            feed,
-            FetchRecord::Updated {
-                feed: &parsed(vec![item("0", at(0))]),
-                validators: Validators::default(),
-            },
-            at(2),
-            at(3),
-        )
-        .await
-        .unwrap();
-
-        let marked = t.db.mark_read(ItemScope::Feed(feed), seen).await.unwrap();
-
-        assert_eq!(marked, 2);
-        assert_eq!(
-            page_guids(
-                &t.db,
-                ItemQuery {
-                    unread_only: true,
-                    ..query(ItemScope::All)
-                }
-            )
-            .await,
-            ["0"]
-        );
-    }
-
-    #[tokio::test]
     async fn full_item_includes_sanitized_content() {
         let t = open().await;
         feed_with_items(&t.db, "https://a.com/feed", vec![item("1", at(1))]).await;
@@ -792,4 +754,178 @@ async fn listed_items_carry_their_summary() {
     let items = t.db.list_items(query(ItemScope::All)).await.unwrap().items;
 
     assert_eq!(items[0].summary.as_deref(), Some("Summary of 1"));
+}
+
+mod slugs {
+    use super::*;
+
+    #[tokio::test]
+    async fn folders_get_unique_slugs_that_follow_renames() {
+        let t = open().await;
+        let tech = t.db.create_folder("Tech!").await.unwrap();
+        let other = t.db.create_folder("Tech?").await.unwrap();
+
+        assert_eq!(tech.slug, "tech");
+        assert_eq!(other.slug, "tech-2");
+
+        assert_eq!(
+            t.db.rename_folder(other.id, "Engineering").await.unwrap(),
+            "engineering"
+        );
+        assert_eq!(
+            t.db.folder_id("engineering").await.unwrap(),
+            other.id
+        );
+        assert!(matches!(
+            t.db.folder_id("tech-2").await,
+            Err(DbError::NotFound)
+        ));
+    }
+
+    #[tokio::test]
+    async fn feeds_get_slugs_from_their_title_and_follow_renames() {
+        let t = open().await;
+        let a =
+            t.db.insert_feed(
+                NewFeed {
+                    title: "Rust Blog".into(),
+                    ..new_feed("https://a.com/feed")
+                },
+                at(0),
+            )
+            .await
+            .unwrap();
+        let b =
+            t.db.insert_feed(
+                NewFeed {
+                    title: "Rust Blog".into(),
+                    ..new_feed("https://b.com/feed")
+                },
+                at(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(a.slug, "rust-blog");
+        assert_eq!(b.slug, "rust-blog-2");
+
+        assert_eq!(
+            t.db.set_custom_title(b.id, Some("Rust Internals"))
+                .await
+                .unwrap(),
+            "rust-internals"
+        );
+        assert_eq!(t.db.feed_id("rust-internals").await.unwrap(), b.id);
+        assert_eq!(
+            t.db.set_custom_title(b.id, None).await.unwrap(),
+            "rust-blog-2"
+        );
+        assert!(matches!(t.db.feed_id("nope").await, Err(DbError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn articles_get_slugs_unique_within_their_feed() {
+        let t = open().await;
+        let same_title = |guid: &str| NewItem {
+            title: Some("Hello World".into()),
+            ..item(guid, at(1))
+        };
+        let untitled = NewItem {
+            title: None,
+            ..item("x", at(2))
+        };
+        let a = feed_with_items(
+            &t.db,
+            "https://a.com/feed",
+            vec![same_title("1"), same_title("2"), untitled],
+        )
+        .await;
+        let b = feed_with_items(&t.db, "https://b.com/feed", vec![same_title("1")]).await;
+
+        let mut slugs: Vec<_> =
+            t.db.list_items(query(ItemScope::Feed(a)))
+                .await
+                .unwrap()
+                .items
+                .into_iter()
+                .map(|i| i.slug)
+                .collect();
+        slugs.sort();
+        assert_eq!(slugs, ["article", "hello-world", "hello-world-2"]);
+
+        let other = &t
+            .db
+            .list_items(query(ItemScope::Feed(b)))
+            .await
+            .unwrap()
+            .items[0];
+        assert_eq!(other.slug, "hello-world");
+        assert_eq!(other.feed_slug, "title-of-https-b-com-feed");
+        let found = t.db.item_id(&other.feed_slug, "hello-world").await.unwrap();
+        assert_eq!(found, other.id);
+    }
+
+    #[tokio::test]
+    async fn refetching_keeps_article_slugs() {
+        let t = open().await;
+        let feed = feed_with_items(&t.db, "https://a.com/feed", vec![item("1", at(1))]).await;
+        let first =
+            t.db.list_items(query(ItemScope::Feed(feed)))
+                .await
+                .unwrap()
+                .items[0]
+                .slug
+                .clone();
+
+        let again = FetchRecord::Updated {
+            feed: &parsed(vec![item("1", at(1)), item("2", at(2))]),
+            validators: Validators::default(),
+        };
+        t.db.record_fetch(feed, again, at(1), at(2)).await.unwrap();
+
+        let slugs: Vec<_> =
+            t.db.list_items(query(ItemScope::Feed(feed)))
+                .await
+                .unwrap()
+                .items
+                .into_iter()
+                .map(|i| i.slug)
+                .collect();
+        assert_eq!(slugs, ["item-2", first.as_str()]);
+    }
+
+    #[tokio::test]
+    async fn mark_read_spares_articles_fetched_after_the_user_looked() {
+        let t = open().await;
+        let feed = feed_with_items(
+            &t.db,
+            "https://a.com/feed",
+            vec![item("1", at(1)), item("2", at(2))],
+        )
+        .await;
+        let seen_until = t.db.list_items(query(ItemScope::All)).await.unwrap().items[0].fetched_at;
+        let later = FetchRecord::Updated {
+            feed: &parsed(vec![item("0", at(0))]),
+            validators: Validators::default(),
+        };
+        t.db.record_fetch(feed, later, at(3), at(4)).await.unwrap();
+
+        let marked =
+            t.db.mark_read(ItemScope::Feed(feed), seen_until)
+                .await
+                .unwrap();
+
+        assert_eq!(marked, 2);
+        assert_eq!(
+            page_guids(
+                &t.db,
+                ItemQuery {
+                    unread_only: true,
+                    ..query(ItemScope::All)
+                }
+            )
+            .await,
+            ["0"]
+        );
+    }
 }

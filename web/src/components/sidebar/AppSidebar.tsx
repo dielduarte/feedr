@@ -32,6 +32,8 @@ type Props = {
   sidebar: SidebarData | undefined
   onNavigate: (scope: Scope) => void
   onOpenDialog: (dialog: DialogName) => void
+  /** A feed or folder was renamed, so its URL changed. */
+  onRenamed: (from: Scope, to: Scope) => void
 }
 
 const dropLine =
@@ -40,9 +42,9 @@ const dropLine =
 const isActive = (current: Scope, candidate: Scope) => scopePath(current) === scopePath(candidate)
 
 /** Memoized: it only depends on the sidebar data and where you are, not on the article list. */
-export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate, onOpenDialog }: Props) {
+export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate, onOpenDialog, onRenamed }: Props) {
   const actions = useSubscriptionActions()
-  const [collapsed, setCollapsed] = useStoredState<number[]>('collapsedFolders', [])
+  const [collapsed, setCollapsed] = useStoredState<string[]>('collapsedFolders', [])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [removal, setRemoval] = useState<Removal | null>(null)
@@ -51,33 +53,38 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
   const uncategorized = sidebar?.uncategorized ?? []
   const drag = useTreeDrag({ folders, uncategorized, onMoveFeed: actions.moveFeed, onMoveFolder: actions.moveFolder })
 
-  const toggleFolder = (id: number) =>
-    setCollapsed((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+  const toggleFolder = (slug: string) =>
+    setCollapsed((slugs) => (slugs.includes(slug) ? slugs.filter((x) => x !== slug) : [...slugs, slug]))
 
   const remove = (target: Removal) => {
     if (target.kind === 'feed') {
-      actions.unsubscribe(target.feed.id)
-      if (isActive(scope, { kind: 'feed', id: target.feed.id })) onNavigate({ kind: 'all' })
+      actions.unsubscribe(target.feed.slug)
+      if (isActive(scope, { kind: 'feed', slug: target.feed.slug })) onNavigate({ kind: 'all' })
     } else {
-      actions.deleteFolder(target.folder.id)
-      if (isActive(scope, { kind: 'folder', id: target.folder.id })) onNavigate({ kind: 'all' })
+      actions.deleteFolder(target.folder.slug)
+      if (isActive(scope, { kind: 'folder', slug: target.folder.slug })) onNavigate({ kind: 'all' })
     }
     setRemoval(null)
   }
 
-  const feedRow = (feed: SidebarFeed, folderId: number | null, siblings: SidebarFeed[]) => (
+  const feedRow = (feed: SidebarFeed, folder: string | null, siblings: SidebarFeed[]) => (
     <FeedRow
-      key={feed.id}
+      key={feed.slug}
       feed={feed}
-      nested={folderId !== null}
-      active={isActive(scope, { kind: 'feed', id: feed.id })}
-      renaming={renaming === `feed:${feed.id}`}
-      dropBefore={drag.dropsBefore(`feed:${feed.id}`)}
-      dragProps={drag.feed(feed, folderId, siblings)}
-      onOpen={() => onNavigate({ kind: 'feed', id: feed.id })}
-      onRename={() => setRenaming(`feed:${feed.id}`)}
+      nested={folder !== null}
+      active={isActive(scope, { kind: 'feed', slug: feed.slug })}
+      renaming={renaming === `feed:${feed.slug}`}
+      dropBefore={drag.dropsBefore(`feed:${feed.slug}`)}
+      dragProps={drag.feed(feed, folder, siblings)}
+      onOpen={() => onNavigate({ kind: 'feed', slug: feed.slug })}
+      onRename={() => setRenaming(`feed:${feed.slug}`)}
       onRenamed={(title) => {
-        if (title !== undefined) actions.renameFeed({ id: feed.id, title: title || null })
+        if (title !== undefined) {
+          actions.renameFeed(
+            { slug: feed.slug, title: title || null },
+            { onSuccess: (renamed) => onRenamed({ kind: 'feed', slug: feed.slug }, { kind: 'feed', slug: renamed.slug }) },
+          )
+        }
         setRenaming(null)
       }}
       onRemove={() => setRemoval({ kind: 'feed', feed })}
@@ -139,24 +146,32 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
                   // Feed rows are siblings of their folder row, not children, so hover and menu
                   // state on one row never leaks into another through `group` variants.
                   <FolderRows
-                    key={folder.id}
+                    key={folder.slug}
                     folder={folder}
-                    open={!collapsed.includes(folder.id)}
-                    active={isActive(scope, { kind: 'folder', id: folder.id })}
-                    renaming={renaming === `folder:${folder.id}`}
-                    dropBefore={drag.dropsBefore(`folder:${folder.id}`)}
-                    dropInto={drag.dropsInto(`folder:${folder.id}`)}
+                    open={!collapsed.includes(folder.slug)}
+                    active={isActive(scope, { kind: 'folder', slug: folder.slug })}
+                    renaming={renaming === `folder:${folder.slug}`}
+                    dropBefore={drag.dropsBefore(`folder:${folder.slug}`)}
+                    dropInto={drag.dropsInto(`folder:${folder.slug}`)}
                     dragProps={drag.folder(folder)}
-                    onOpen={() => onNavigate({ kind: 'folder', id: folder.id })}
-                    onToggle={() => toggleFolder(folder.id)}
-                    onRename={() => setRenaming(`folder:${folder.id}`)}
+                    onOpen={() => onNavigate({ kind: 'folder', slug: folder.slug })}
+                    onToggle={() => toggleFolder(folder.slug)}
+                    onRename={() => setRenaming(`folder:${folder.slug}`)}
                     onRenamed={(name) => {
-                      if (name) actions.renameFolder({ id: folder.id, name })
+                      if (name) {
+                        actions.renameFolder(
+                          { slug: folder.slug, name },
+                          {
+                            onSuccess: (renamed) =>
+                              onRenamed({ kind: 'folder', slug: folder.slug }, { kind: 'folder', slug: renamed.slug }),
+                          },
+                        )
+                      }
                       setRenaming(null)
                     }}
                     onRemove={() => setRemoval({ kind: 'folder', folder })}
                   >
-                    {folder.feeds.map((feed) => feedRow(feed, folder.id, folder.feeds))}
+                    {folder.feeds.map((feed) => feedRow(feed, folder.slug, folder.feeds))}
                   </FolderRows>
                 ))}
 
@@ -251,7 +266,7 @@ function FeedRow({ feed, nested, active, renaming, dropBefore, dragProps, onOpen
           <RowMenu
             label={feed.title}
             onRename={onRename}
-            onRefresh={() => api.refresh({ kind: 'feed', id: feed.id })}
+            onRefresh={() => api.refresh({ kind: 'feed', slug: feed.slug })}
             destructiveLabel="Unsubscribe…"
             onDestroy={onRemove}
           />
@@ -302,7 +317,7 @@ function FolderRows({ folder, open, active, renaming, dropBefore, dropInto, drag
             <RowMenu
               label={folder.name}
               onRename={onRename}
-              onRefresh={() => api.refresh({ kind: 'folder', id: folder.id })}
+              onRefresh={() => api.refresh({ kind: 'folder', slug: folder.slug })}
               destructiveLabel="Delete folder…"
               onDestroy={onRemove}
             />

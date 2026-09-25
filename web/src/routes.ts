@@ -2,10 +2,13 @@ export type Scope =
   | { kind: 'all' }
   | { kind: 'unread' }
   | { kind: 'starred' }
-  | { kind: 'folder'; id: number }
-  | { kind: 'feed'; id: number }
+  | { kind: 'folder'; slug: string }
+  | { kind: 'feed'; slug: string }
 
-export type Location = { scope: Scope; itemId: number | null }
+/** An article is addressed by its feed's slug and its own, which is unique within the feed. */
+export type ArticleRef = { feed: string; slug: string }
+
+export type Location = { scope: Scope; article: ArticleRef | null }
 
 export function scopePath(scope: Scope): string {
   switch (scope.kind) {
@@ -16,37 +19,38 @@ export function scopePath(scope: Scope): string {
     case 'starred':
       return '/starred'
     case 'folder':
-      return `/folders/${scope.id}`
+      return `/folders/${encodeURIComponent(scope.slug)}`
     case 'feed':
-      return `/feeds/${scope.id}`
+      return `/feeds/${encodeURIComponent(scope.slug)}`
   }
 }
 
-export function itemPath(scope: Scope, itemId: number): string {
-  const base = scopePath(scope)
-  return `${base === '/' ? '' : base}/items/${itemId}`
+export function articlePath(article: ArticleRef): string {
+  return `/feeds/${encodeURIComponent(article.feed)}/${encodeURIComponent(article.slug)}`
 }
 
-const ALL: Scope = { kind: 'all' }
-
-function id(segment: string | undefined): number | null {
-  return segment !== undefined && /^\d+$/.test(segment) ? Number(segment) : null
+export function articleKey(article: ArticleRef): string {
+  return `${article.feed}/${article.slug}`
 }
+
+const ALL: Location = { scope: { kind: 'all' }, article: null }
 
 export function parseLocation(path: string): Location {
-  const segments = path.split('/').filter(Boolean)
-  let scope: Scope = ALL
-  let rest = segments
+  const segments = path.split('/').filter(Boolean).map(decodeURIComponent)
+  const [section, slug, article, ...rest] = segments
+  if (rest.length > 0) return ALL
 
-  const [first, second] = segments
-  if (first === 'unread' || first === 'starred') {
-    scope = { kind: first }
-    rest = segments.slice(1)
-  } else if ((first === 'folders' || first === 'feeds') && id(second) !== null) {
-    scope = { kind: first === 'folders' ? 'folder' : 'feed', id: id(second)! }
-    rest = segments.slice(2)
+  if ((section === 'unread' || section === 'starred') && slug === undefined) {
+    return { scope: { kind: section }, article: null }
   }
-
-  const itemId = rest[0] === 'items' ? id(rest[1]) : null
-  return { scope, itemId }
+  if (section === 'folders' && slug !== undefined && article === undefined) {
+    return { scope: { kind: 'folder', slug }, article: null }
+  }
+  if (section === 'feeds' && slug !== undefined) {
+    return {
+      scope: { kind: 'feed', slug },
+      article: article === undefined ? null : { feed: slug, slug: article },
+    }
+  }
+  return ALL
 }

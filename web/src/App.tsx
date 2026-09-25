@@ -11,7 +11,7 @@ import { ListPage } from './pages/ListPage'
 import { ReaderPage } from './pages/ReaderPage'
 import { usePoller } from './poller'
 import { useLookup, useSidebarData } from './queries'
-import { itemPath, parseLocation, scopePath, type Scope } from './routes'
+import { type ArticleRef, articleKey, articlePath, parseLocation, scopePath, type Scope } from './routes'
 
 export function App() {
   const [open, setOpen] = useStoredState('sidebarOpen', true)
@@ -25,11 +25,18 @@ export function App() {
 function Shell() {
   const [path, setPath] = useLocation()
   // Parsed once per URL so `scope` keeps its identity and memoized children don't re-render.
-  const { scope, itemId } = useMemo(() => parseLocation(path), [path])
+  const location = useMemo(() => parseLocation(path), [path])
+  const { article } = location
+  // An article has one URL wherever it was opened from; the list it came from rides along in
+  // history state, so the switcher, J/K and Back keep working within that list.
+  const scope = useMemo(() => {
+    const listPath: unknown = window.history.state?.listPath
+    return article && typeof listPath === 'string' ? parseLocation(listPath).scope : location.scope
+  }, [location, article])
   const { toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const [unreadPreference, setUnreadPreference] = useStoredState('unreadOnly', false)
   const [dialog, setDialog] = useState<DialogName | null>(null)
-  const [lastOpenedId, setLastOpenedId] = useState<number | null>(null)
+  const [lastOpenedKey, setLastOpenedKey] = useState<string | null>(null)
   const { status, refresh } = usePoller()
   const { data: sidebar } = useSidebarData()
   const lookup = useLookup(sidebar)
@@ -43,11 +50,25 @@ function Shell() {
     [setPath, isMobile, setOpenMobile],
   )
   const openArticle = useCallback(
-    (id: number) => {
-      setLastOpenedId(id)
-      setPath(itemPath(scope, id))
+    (target: ArticleRef) => {
+      setLastOpenedKey(articleKey(target))
+      setPath(articlePath(target), { state: { listPath: scopePath(scope) } })
     },
     [setPath, scope],
+  )
+  // Renaming changes a URL; if you're looking at what was renamed, move with it.
+  const followRename = useCallback(
+    (from: Scope, to: Scope) => {
+      const renamed = (candidate: Scope) => scopePath(candidate) === scopePath(from)
+      const listPath = scopePath(renamed(scope) ? to : scope)
+      if (article) {
+        const feed = from.kind === 'feed' && to.kind === 'feed' && article.feed === from.slug ? to.slug : article.feed
+        setPath(articlePath({ feed, slug: article.slug }), { replace: true, state: { listPath } })
+      } else if (renamed(scope)) {
+        setPath(listPath, { replace: true })
+      }
+    },
+    [article, scope, setPath],
   )
   const backToList = useCallback(() => setPath(scopePath(scope)), [setPath, scope])
   const closeDialog = useCallback(() => setDialog(null), [])
@@ -69,17 +90,17 @@ function Shell() {
 
   return (
     <>
-      <AppSidebar scope={scope} sidebar={sidebar} onNavigate={navigate} onOpenDialog={setDialog} />
+      <AppSidebar scope={scope} sidebar={sidebar} onNavigate={navigate} onOpenDialog={setDialog} onRenamed={followRename} />
 
       <SidebarInset className="h-dvh min-w-0 overflow-hidden md:h-[calc(100dvh-1rem)] md:border md:shadow-[0_1px_2px_rgb(0_0_0/0.03),0_18px_40px_-20px_rgb(0_0_0/0.12)]">
-        {itemId === null ? (
+        {article === null ? (
           <ListPage
             // A new scope starts with a fresh selection.
             key={scopePath(scope)}
             chrome={chrome}
             unreadPreference={unreadPreference}
             onUnreadPreferenceChange={setUnreadPreference}
-            initialSelectedId={lastOpenedId}
+            initialSelectedKey={lastOpenedKey}
             onOpen={openArticle}
             onAddFeed={() => setDialog('add')}
             onImport={() => setDialog('transfer')}
@@ -87,7 +108,7 @@ function Shell() {
         ) : (
           <ReaderPage
             chrome={chrome}
-            itemId={itemId}
+            article={article}
             unreadOnly={listsUnreadOnly(scope, unreadPreference)}
             onBack={backToList}
             onOpen={openArticle}
@@ -99,11 +120,11 @@ function Shell() {
         {dialog === 'add' ? (
           <AddFeedDialog
             sidebar={sidebar}
-            defaultFolder={scope.kind === 'folder' ? scope.id : null}
+            defaultFolder={scope.kind === 'folder' ? scope.slug : null}
             onClose={closeDialog}
-            onAdded={(id) => {
+            onAdded={(slug) => {
               closeDialog()
-              navigate({ kind: 'feed', id })
+              navigate({ kind: 'feed', slug })
             }}
           />
         ) : null}

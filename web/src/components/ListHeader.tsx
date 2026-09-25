@@ -12,12 +12,12 @@ type Props = {
 }
 
 export function ListHeader({ heading, scope, sidebar, lookup }: Props) {
-  const feed = scope.kind === 'feed' ? lookup.feed(scope.id) : undefined
+  const feed = scope.kind === 'feed' ? lookup.feed(scope.slug) : undefined
   const details: ReactNode[] = []
 
   if (sidebar && (scope.kind === 'all' || scope.kind === 'unread')) details.push(`${sidebar.total_unread} unread`)
   if (scope.kind === 'folder') {
-    const folder = lookup.folder(scope.id)
+    const folder = lookup.folder(scope.slug)
     if (folder) details.push(`${folder.unread} unread in ${folder.feeds.length} ${folder.feeds.length === 1 ? 'feed' : 'feeds'}`)
   }
   if (feed) {

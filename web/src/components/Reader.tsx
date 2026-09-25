@@ -62,7 +62,7 @@ export function Reader({ item, words, siteUrl, missing }: Props) {
       </h1>
       <div className="mb-9 flex flex-wrap items-center gap-x-4.5 gap-y-1.5 text-[13.5px] text-muted-foreground">
         <Link
-          href={scopePath({ kind: 'feed', id: item.feed_id })}
+          href={scopePath({ kind: 'feed', slug: item.feed_slug })}
           className="inline-flex items-center gap-2 font-medium text-foreground hover:underline hover:underline-offset-3"
         >
           <FeedIcon siteUrl={siteUrl} />

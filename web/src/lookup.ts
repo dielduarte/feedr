@@ -2,24 +2,24 @@ import type { Sidebar, SidebarFeed, SidebarFolder } from './api'
 import type { Scope } from './routes'
 
 export type Lookup = {
-  feed: (id: number) => SidebarFeed | undefined
-  folder: (id: number) => SidebarFolder | undefined
+  feed: (slug: string) => SidebarFeed | undefined
+  folder: (slug: string) => SidebarFolder | undefined
   hasFeeds: boolean
 }
 
-/** Indexes the sidebar once so feeds and folders can be found by id without rescanning it. */
+/** Indexes the sidebar once so feeds and folders can be found by slug without rescanning it. */
 export function buildLookup(sidebar: Sidebar | undefined): Lookup {
-  const feeds = new Map<number, SidebarFeed>()
-  const folders = new Map<number, SidebarFolder>()
+  const feeds = new Map<string, SidebarFeed>()
+  const folders = new Map<string, SidebarFolder>()
   for (const folder of sidebar?.folders ?? []) {
-    folders.set(folder.id, folder)
-    for (const feed of folder.feeds) feeds.set(feed.id, feed)
+    folders.set(folder.slug, folder)
+    for (const feed of folder.feeds) feeds.set(feed.slug, feed)
   }
-  for (const feed of sidebar?.uncategorized ?? []) feeds.set(feed.id, feed)
+  for (const feed of sidebar?.uncategorized ?? []) feeds.set(feed.slug, feed)
 
   return {
-    feed: (id) => feeds.get(id),
-    folder: (id) => folders.get(id),
+    feed: (slug) => feeds.get(slug),
+    folder: (slug) => folders.get(slug),
     hasFeeds: feeds.size > 0,
   }
 }
@@ -33,8 +33,8 @@ export function scopeLabel(scope: Scope, lookup: Lookup): string {
     case 'starred':
       return 'Starred'
     case 'folder':
-      return lookup.folder(scope.id)?.name ?? 'Folder'
+      return lookup.folder(scope.slug)?.name ?? 'Folder'
     case 'feed':
-      return lookup.feed(scope.id)?.title ?? 'Feed'
+      return lookup.feed(scope.slug)?.title ?? 'Feed'
   }
 }

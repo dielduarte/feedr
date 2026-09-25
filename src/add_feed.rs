@@ -10,7 +10,9 @@ use crate::schedule::POLL_INTERVAL;
 
 #[derive(Debug, serde::Serialize)]
 pub struct Added {
+    #[serde(skip)]
     pub id: FeedId,
+    pub slug: String,
     pub title: String,
     pub new_items: u64,
 }
@@ -99,11 +101,12 @@ async fn subscribe(
         site_url: feed.site_url.clone(),
         folder,
     };
-    let (id, new_items) = db
+    let (stored, new_items) = db
         .subscribe(new, &feed, validators, now, now + POLL_INTERVAL)
         .await?;
     Ok(Added {
-        id,
+        id: stored.id,
+        slug: stored.slug,
         title: feed.title,
         new_items,
     })

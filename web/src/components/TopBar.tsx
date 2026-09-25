@@ -145,7 +145,7 @@ function ScopeIcon({ scope, lookup }: { scope: Scope; lookup: Lookup }) {
     case 'folder':
       return <Folder />
     case 'feed':
-      return <FeedIcon siteUrl={lookup.feed(scope.id)?.site_url ?? null} />
+      return <FeedIcon siteUrl={lookup.feed(scope.slug)?.site_url ?? null} />
   }
 }
 
@@ -183,10 +183,10 @@ function ScopeSwitcher({ scope, label, sidebar, onNavigate }: SwitcherProps) {
         {option({ kind: 'starred' }, 'Starred')}
         {hasFeeds ? <DropdownMenuSeparator /> : null}
         {sidebar?.folders.map((folder) => [
-          option({ kind: 'folder', id: folder.id }, folder.name),
-          ...folder.feeds.map((feed) => option({ kind: 'feed', id: feed.id }, feed.title, true)),
+          option({ kind: 'folder', slug: folder.slug }, folder.name),
+          ...folder.feeds.map((feed) => option({ kind: 'feed', slug: feed.slug }, feed.title, true)),
         ])}
-        {sidebar?.uncategorized.map((feed) => option({ kind: 'feed', id: feed.id }, feed.title))}
+        {sidebar?.uncategorized.map((feed) => option({ kind: 'feed', slug: feed.slug }, feed.title))}
       </DropdownMenuContent>
     </DropdownMenu>
   )

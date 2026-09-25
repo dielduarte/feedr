@@ -10,3 +10,4 @@ pub mod parse;
 pub mod poller;
 pub mod sanitize;
 pub mod schedule;
+pub mod slugs;

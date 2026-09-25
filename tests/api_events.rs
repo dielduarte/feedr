@@ -78,7 +78,7 @@ async fn streams_poller_events_to_the_browser() {
     .await
     .unwrap();
 
-    assert_eq!(event["feed"], feed.id.0);
+    assert_eq!(event["feed"], feed.slug);
     assert_eq!(event["new_items"], 4);
     cancel.cancel();
 }

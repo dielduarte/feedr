@@ -1,7 +1,7 @@
-import type { Scope } from './routes'
+import type { ArticleRef, Scope } from './routes'
 
 export interface SidebarFeed {
-  id: number
+  slug: string
   title: string
   url: string
   site_url: string | null
@@ -10,7 +10,7 @@ export interface SidebarFeed {
 }
 
 export interface SidebarFolder {
-  id: number
+  slug: string
   name: string
   unread: number
   feeds: SidebarFeed[]
@@ -23,14 +23,16 @@ export interface Sidebar {
 }
 
 export interface ItemSummary {
-  id: number
-  feed_id: number
+  slug: string
+  feed_slug: string
   feed_title: string
   url: string | null
   title: string | null
   author: string | null
   summary: string | null
   published_at: string
+  /** When feedrsauros stored it; "mark all read" spares anything stored later. */
+  fetched_at: string
   read_at: string | null
   starred_at: string | null
 }
@@ -45,7 +47,7 @@ export interface Page {
 }
 
 export interface Added {
-  id: number
+  slug: string
   title: string
   new_items: number
 }
@@ -58,10 +60,18 @@ export interface ImportReport {
 
 export type PollerEvent =
   | { type: 'batch_started'; feeds: number }
-  | { type: 'feed_refreshed'; feed: number; new_items: number }
-  | { type: 'feed_failed'; feed: number; error: string }
+  | { type: 'feed_refreshed'; feed: string; new_items: number }
+  | { type: 'feed_failed'; feed: string; error: string }
   | { type: 'batch_finished'; health: 'online' | 'offline' }
   | { type: 'resync' }
+
+export interface Renamed {
+  slug: string
+}
+
+function articleUrl(article: ArticleRef): string {
+  return `/api/feeds/${encodeURIComponent(article.feed)}/items/${encodeURIComponent(article.slug)}`
+}
 
 export class ApiError extends Error {
   readonly status: number
@@ -85,14 +95,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return response.status === 204 ? (undefined as T) : response.json()
 }
 
-type ScopeFilter = { feed?: number; folder?: number; starred?: boolean }
+type ScopeFilter = { feed?: string; folder?: string; starred?: boolean }
 
 function scopeFilter(scope: Scope): ScopeFilter {
   switch (scope.kind) {
     case 'folder':
-      return { folder: scope.id }
+      return { folder: scope.slug }
     case 'feed':
-      return { feed: scope.id }
+      return { feed: scope.slug }
     case 'starred':
       return { starred: true }
     case 'all':
@@ -116,31 +126,33 @@ export const api = {
     return request<Page>('GET', `/api/items?${query}`)
   },
 
-  item: (id: number) => request<Item>('GET', `/api/items/${id}`),
-  updateItem: (id: number, patch: { read?: boolean; starred?: boolean }) =>
-    request<void>('PATCH', `/api/items/${id}`, patch),
-  markRead: (scope: Scope, upTo: number) =>
+  item: (article: ArticleRef) => request<Item>('GET', articleUrl(article)),
+  updateItem: (article: ArticleRef, patch: { read?: boolean; starred?: boolean }) =>
+    request<void>('PATCH', articleUrl(article), patch),
+  markRead: (scope: Scope, seenUntil: string) =>
     request<{ marked: number }>('POST', '/api/items/mark-read', {
       ...scopeFilter(scope),
-      up_to: upTo,
+      seen_until: seenUntil,
     }),
 
-  subscribe: (url: string, folderId: number | null) =>
-    request<Added>('POST', '/api/feeds', { url, folder_id: folderId }),
-  unsubscribe: (id: number) => request<void>('DELETE', `/api/feeds/${id}`),
-  moveFeed: (id: number, folderId: number | null, index: number) =>
-    request<void>('PUT', `/api/feeds/${id}/position`, { folder_id: folderId, index }),
-  renameFeed: (id: number, title: string | null) =>
-    request<void>('PUT', `/api/feeds/${id}/title`, { title }),
+  subscribe: (url: string, folder: string | null) => request<Added>('POST', '/api/feeds', { url, folder }),
+  unsubscribe: (slug: string) => request<void>('DELETE', `/api/feeds/${encodeURIComponent(slug)}`),
+  moveFeed: (slug: string, folder: string | null, index: number) =>
+    request<void>('PUT', `/api/feeds/${encodeURIComponent(slug)}/position`, { folder, index }),
+  /** Resolves to the feed's new slug: its URL follows its name. */
+  renameFeed: (slug: string, title: string | null) =>
+    request<Renamed>('PUT', `/api/feeds/${encodeURIComponent(slug)}/title`, { title }),
 
-  createFolder: (name: string) => request<{ id: number; name: string }>('POST', '/api/folders', { name }),
-  renameFolder: (id: number, name: string) => request<void>('PATCH', `/api/folders/${id}`, { name }),
-  moveFolder: (id: number, index: number) =>
-    request<void>('PUT', `/api/folders/${id}/position`, { index }),
-  deleteFolder: (id: number) => request<void>('DELETE', `/api/folders/${id}`),
+  createFolder: (name: string) => request<{ slug: string; name: string }>('POST', '/api/folders', { name }),
+  /** Resolves to the folder's new slug: its URL follows its name. */
+  renameFolder: (slug: string, name: string) =>
+    request<Renamed>('PATCH', `/api/folders/${encodeURIComponent(slug)}`, { name }),
+  moveFolder: (slug: string, index: number) =>
+    request<void>('PUT', `/api/folders/${encodeURIComponent(slug)}/position`, { index }),
+  deleteFolder: (slug: string) => request<void>('DELETE', `/api/folders/${encodeURIComponent(slug)}`),
 
   refresh(scope: Scope) {
-    const body = scope.kind === 'feed' ? { feed: scope.id } : scope.kind === 'folder' ? { folder: scope.id } : {}
+    const body = scope.kind === 'feed' ? { feed: scope.slug } : scope.kind === 'folder' ? { folder: scope.slug } : {}
     return request<{ scheduled: number }>('POST', '/api/refresh', body)
   },
 

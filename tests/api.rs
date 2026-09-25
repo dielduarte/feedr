@@ -112,40 +112,46 @@ impl Api {
         self.send(reqwest::Method::DELETE, path, None).await
     }
 
-    async fn subscribe(&self, site_path: &str, folder: Option<i64>) -> i64 {
+    async fn subscribe(&self, site_path: &str, folder: Option<&str>) -> String {
         let url = self.sites.join(site_path).unwrap();
         let (status, body) = self
-            .post("api/feeds", json!({ "url": url, "folder_id": folder }))
+            .post("api/feeds", json!({ "url": url, "folder": folder }))
             .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
-        body["id"].as_i64().unwrap()
+        body["slug"].as_str().unwrap().to_string()
     }
 
-    async fn folder(&self, name: &str) -> i64 {
+    async fn folder(&self, name: &str) -> String {
         let (status, body) = self.post("api/folders", json!({ "name": name })).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
-        body["id"].as_i64().unwrap()
+        body["slug"].as_str().unwrap().to_string()
     }
 
     async fn sidebar(&self) -> Value {
         self.get("api/sidebar").await.1
     }
 
-    async fn item_titles(&self, query: &str) -> Vec<String> {
+    async fn items(&self, query: &str) -> Vec<Value> {
         let (status, body) = self.get(&format!("api/items{query}")).await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        body["items"]
-            .as_array()
-            .unwrap()
+        body["items"].as_array().unwrap().clone()
+    }
+
+    async fn item_titles(&self, query: &str) -> Vec<String> {
+        self.items(query)
+            .await
             .iter()
             .map(|i| i["title"].as_str().unwrap().to_string())
             .collect()
     }
 
-    async fn first_item_id(&self, query: &str) -> i64 {
-        self.get(&format!("api/items{query}")).await.1["items"][0]["id"]
-            .as_i64()
-            .unwrap()
+    /// The API path of an article, built from the slugs the list returns.
+    fn item_path(item: &Value) -> String {
+        format!(
+            "api/feeds/{}/items/{}",
+            item["feed_slug"].as_str().unwrap(),
+            item["slug"].as_str().unwrap()
+        )
     }
 }
 
@@ -153,27 +159,45 @@ mod sidebar {
     use super::*;
 
     #[tokio::test]
-    async fn shows_folders_feeds_and_unread_counts() {
+    async fn shows_folders_feeds_and_unread_counts_by_slug() {
         let api = start().await;
         let tech = api.folder("Tech").await;
-        let a = api.subscribe("a.xml", Some(tech)).await;
+        let a = api.subscribe("a.xml", Some(&tech)).await;
         let b = api.subscribe("b.xml", None).await;
 
         let sidebar = api.sidebar().await;
 
+        assert_eq!(
+            (tech.as_str(), a.as_str(), b.as_str()),
+            ("tech", "example-blog", "example-blog-2")
+        );
         assert_eq!(sidebar["total_unread"], 8);
-        assert_eq!(sidebar["folders"][0]["id"], tech);
+        assert_eq!(sidebar["folders"][0]["slug"], "tech");
         assert_eq!(sidebar["folders"][0]["name"], "Tech");
         assert_eq!(sidebar["folders"][0]["unread"], 4);
-        assert_eq!(sidebar["folders"][0]["feeds"][0]["id"], a);
+        assert_eq!(sidebar["folders"][0]["feeds"][0]["slug"], "example-blog");
         assert_eq!(sidebar["folders"][0]["feeds"][0]["title"], "Example Blog");
         assert_eq!(
             sidebar["folders"][0]["feeds"][0]["site_url"],
             "https://example.com/"
         );
-        assert_eq!(sidebar["uncategorized"][0]["id"], b);
-        assert_eq!(sidebar["uncategorized"][0]["unread"], 4);
+        assert_eq!(sidebar["uncategorized"][0]["slug"], "example-blog-2");
         assert_eq!(sidebar["uncategorized"][0]["last_error"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn never_exposes_internal_ids() {
+        let api = start().await;
+        let tech = api.folder("Tech").await;
+        api.subscribe("a.xml", Some(&tech)).await;
+
+        let sidebar = api.sidebar().await;
+        let item = &api.items("").await[0];
+
+        assert_eq!(sidebar["folders"][0].get("id"), None);
+        assert_eq!(sidebar["folders"][0]["feeds"][0].get("id"), None);
+        assert_eq!(item.get("id"), None);
+        assert_eq!(item.get("feed_id"), None);
     }
 }
 
@@ -192,18 +216,28 @@ mod folders {
     }
 
     #[tokio::test]
-    async fn can_be_renamed() {
+    async fn move_to_a_new_url_when_renamed() {
         let api = start().await;
         let tech = api.folder("Tech").await;
 
-        let (status, _) = api
+        let (status, body) = api
             .patch(&format!("api/folders/{tech}"), json!({ "name": "Code" }))
             .await;
 
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["slug"], "code");
         assert_eq!(api.sidebar().await["folders"][0]["name"], "Code");
-        let (status, _) = api.patch("api/folders/999", json!({ "name": "X" })).await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(api.get("api/items?folder=code").await.0, StatusCode::OK);
+        assert_eq!(
+            api.get("api/items?folder=tech").await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            api.patch("api/folders/nope", json!({ "name": "X" }))
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
@@ -224,14 +258,14 @@ mod folders {
     async fn deleting_keeps_their_feeds() {
         let api = start().await;
         let tech = api.folder("Tech").await;
-        let feed = api.subscribe("a.xml", Some(tech)).await;
+        let feed = api.subscribe("a.xml", Some(&tech)).await;
 
         let (status, _) = api.delete(&format!("api/folders/{tech}")).await;
 
         assert_eq!(status, StatusCode::NO_CONTENT);
         let sidebar = api.sidebar().await;
         assert_eq!(sidebar["folders"], json!([]));
-        assert_eq!(sidebar["uncategorized"][0]["id"], feed);
+        assert_eq!(sidebar["uncategorized"][0]["slug"], feed);
     }
 }
 
@@ -246,6 +280,7 @@ mod feeds {
         let (status, body) = api.post("api/feeds", json!({ "url": url })).await;
 
         assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["slug"], "example-blog");
         assert_eq!(body["title"], "Example Blog");
         assert_eq!(body["new_items"], 4);
     }
@@ -275,7 +310,7 @@ mod feeds {
         let (status, body) = api
             .post(
                 "api/feeds",
-                json!({ "url": api.sites.join("b.xml").unwrap(), "folder_id": 999 }),
+                json!({ "url": api.sites.join("b.xml").unwrap(), "folder": "nope" }),
             )
             .await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
@@ -285,46 +320,53 @@ mod feeds {
     async fn can_move_between_folders() {
         let api = start().await;
         let tech = api.folder("Tech").await;
-        let a = api.subscribe("a.xml", Some(tech)).await;
+        let a = api.subscribe("a.xml", Some(&tech)).await;
         let b = api.subscribe("b.xml", None).await;
 
         let (status, _) = api
             .put(
                 &format!("api/feeds/{b}/position"),
-                json!({ "folder_id": tech, "index": 0 }),
+                json!({ "folder": tech, "index": 0 }),
             )
             .await;
 
         assert_eq!(status, StatusCode::NO_CONTENT);
         let feeds = &api.sidebar().await["folders"][0]["feeds"];
-        assert_eq!(feeds[0]["id"], b);
-        assert_eq!(feeds[1]["id"], a);
+        assert_eq!(feeds[0]["slug"], b);
+        assert_eq!(feeds[1]["slug"], a);
 
         api.put(
             &format!("api/feeds/{a}/position"),
-            json!({ "folder_id": null, "index": 0 }),
+            json!({ "folder": null, "index": 0 }),
         )
         .await;
 
-        assert_eq!(api.sidebar().await["uncategorized"][0]["id"], a);
+        assert_eq!(api.sidebar().await["uncategorized"][0]["slug"], a);
     }
 
     #[tokio::test]
-    async fn can_be_renamed_and_reset() {
+    async fn move_to_a_new_url_when_renamed_and_back_when_reset() {
         let api = start().await;
         let feed = api.subscribe("a.xml", None).await;
 
-        api.put(
-            &format!("api/feeds/{feed}/title"),
-            json!({ "title": "Mine" }),
-        )
-        .await;
-        assert_eq!(api.sidebar().await["uncategorized"][0]["title"], "Mine");
-
-        let (status, _) = api
-            .put(&format!("api/feeds/{feed}/title"), json!({ "title": null }))
+        let (status, body) = api
+            .put(
+                &format!("api/feeds/{feed}/title"),
+                json!({ "title": "Mine" }),
+            )
             .await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["slug"], "mine");
+        assert_eq!(api.sidebar().await["uncategorized"][0]["title"], "Mine");
+        assert_eq!(
+            api.get(&format!("api/items?feed={feed}")).await.0,
+            StatusCode::NOT_FOUND
+        );
+
+        let (_, body) = api
+            .put("api/feeds/mine/title", json!({ "title": null }))
+            .await;
+        assert_eq!(body["slug"], "example-blog");
         assert_eq!(
             api.sidebar().await["uncategorized"][0]["title"],
             "Example Blog"
@@ -356,7 +398,7 @@ mod feeds {
         assert_eq!(status, StatusCode::ACCEPTED);
         assert_eq!(body["scheduled"], 1);
         let (status, _) = api
-            .post("api/refresh", json!({ "feed": feed, "folder": 1 }))
+            .post("api/refresh", json!({ "feed": feed, "folder": "tech" }))
             .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
@@ -375,8 +417,11 @@ mod items {
 
         assert_eq!(body["items"].as_array().unwrap().len(), 4);
         assert_eq!(first["feed_title"], "Example Blog");
+        assert_eq!(first["feed_slug"], "example-blog");
+        assert!(first["slug"].is_string());
         assert!(first["summary"].is_string());
         assert!(first["published_at"].is_string());
+        assert!(first["fetched_at"].is_string());
         assert_eq!(first["read_at"], Value::Null);
         assert_eq!(first.get("content_html"), None);
         assert_eq!(body["next_cursor"], Value::Null);
@@ -404,11 +449,11 @@ mod items {
     async fn can_be_filtered_by_scope_and_state() {
         let api = start().await;
         let tech = api.folder("Tech").await;
-        let a = api.subscribe("a.xml", Some(tech)).await;
+        let a = api.subscribe("a.xml", Some(&tech)).await;
         api.subscribe("b.xml", None).await;
-        let starred = api.first_item_id(&format!("?feed={a}")).await;
+        let first = api.items(&format!("?feed={a}")).await[0].clone();
         api.patch(
-            &format!("api/items/{starred}"),
+            &Api::item_path(&first),
             json!({ "starred": true, "read": true }),
         )
         .await;
@@ -421,48 +466,41 @@ mod items {
             api.get(&format!("api/items?feed={a}&starred=true")).await.0,
             StatusCode::BAD_REQUEST
         );
+        assert_eq!(
+            api.get("api/items?feed=nope").await.0,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
-    async fn open_with_their_sanitized_content() {
+    async fn open_at_their_feed_and_article_slugs() {
         let api = start().await;
         api.subscribe("a.xml", None).await;
-        let (_, list) = api.get("api/items").await;
-        let post = list["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|i| i["title"] == "First post")
-            .unwrap()["id"]
-            .clone();
 
-        let (status, item) = api.get(&format!("api/items/{post}")).await;
+        let (status, item) = api.get("api/feeds/example-blog/items/first-post").await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(item["title"], "First post");
         assert!(item["content_html"].as_str().unwrap().contains("Hello"));
         assert!(!item["content_html"].as_str().unwrap().contains("script"));
-        assert_eq!(api.get("api/items/999").await.0, StatusCode::NOT_FOUND);
+        assert_eq!(
+            api.get("api/feeds/example-blog/items/nope").await.0,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]
     async fn can_be_marked_read_and_unread() {
         let api = start().await;
         api.subscribe("a.xml", None).await;
-        let id = api.first_item_id("").await;
+        let path = Api::item_path(&api.items("").await[0]);
 
-        let (status, _) = api
-            .patch(&format!("api/items/{id}"), json!({ "read": true }))
-            .await;
+        let (status, _) = api.patch(&path, json!({ "read": true })).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
-        assert!(api.get(&format!("api/items/{id}")).await.1["read_at"].is_string());
+        assert!(api.get(&path).await.1["read_at"].is_string());
 
-        api.patch(&format!("api/items/{id}"), json!({ "read": false }))
-            .await;
-        assert_eq!(
-            api.get(&format!("api/items/{id}")).await.1["read_at"],
-            Value::Null
-        );
+        api.patch(&path, json!({ "read": false })).await;
+        assert_eq!(api.get(&path).await.1["read_at"], Value::Null);
     }
 
     #[tokio::test]
@@ -470,12 +508,12 @@ mod items {
         let api = start().await;
         let a = api.subscribe("a.xml", None).await;
         api.subscribe("b.xml", None).await;
-        let newest_seen = api.first_item_id(&format!("?feed={a}")).await;
+        let seen_until = api.items(&format!("?feed={a}")).await[0]["fetched_at"].clone();
 
         let (status, body) = api
             .post(
                 "api/items/mark-read",
-                json!({ "feed": a, "up_to": newest_seen }),
+                json!({ "feed": a, "seen_until": seen_until }),
             )
             .await;
 
@@ -542,7 +580,7 @@ mod opml {
     async fn export_downloads_an_opml_file() {
         let api = start().await;
         let tech = api.folder("Tech").await;
-        api.subscribe("a.xml", Some(tech)).await;
+        api.subscribe("a.xml", Some(&tech)).await;
 
         let response = api
             .client
@@ -577,7 +615,7 @@ mod web_app {
     async fn is_served_for_any_non_api_path_so_links_survive_a_reload() {
         let api = start().await;
 
-        for path in ["", "unread", "feeds/3/items/9"] {
+        for path in ["", "unread", "feeds/example-blog/items/first-post"] {
             let response = api
                 .client
                 .get(api.base.join(path).unwrap())

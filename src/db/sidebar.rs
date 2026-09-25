@@ -18,7 +18,9 @@ pub struct SidebarFolder {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SidebarFeed {
+    #[serde(skip)]
     pub id: FeedId,
+    pub slug: String,
     pub title: String,
     pub url: Url,
     pub site_url: Option<Url>,
@@ -42,7 +44,7 @@ impl SidebarFolder {
 impl Db {
     pub async fn sidebar(&self) -> Result<Sidebar, DbError> {
         let rows = sqlx::query!(
-            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId",
+            r#"SELECT id AS "id: FeedId", slug, folder_id AS "folder_id: FolderId",
                       COALESCE(custom_title, title) AS "title!: String", url, site_url, last_error,
                       (SELECT COUNT(*) FROM items WHERE items.feed_id = feeds.id AND read_at IS NULL) AS "unread!: u32"
                FROM feeds
@@ -65,6 +67,7 @@ impl Db {
         for row in rows {
             let feed = SidebarFeed {
                 id: row.id,
+                slug: row.slug,
                 title: row.title,
                 url: parse_stored_url(&row.url)?,
                 site_url: parse_optional_url(row.site_url),

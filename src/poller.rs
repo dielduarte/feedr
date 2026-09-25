@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::db::{Db, DbError, Feed, FetchRecord};
 use crate::fetch::{FetchError, Fetched, Fetcher};
-use crate::model::{FeedId, FeedScope};
+use crate::model::FeedScope;
 use crate::schedule::{Attempt, HISTORY, adaptive_interval, next_fetch_at};
 
 pub const CONCURRENCY: usize = 8;
@@ -26,10 +26,21 @@ const PROBE_CANDIDATES: u32 = 10;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PollerEvent {
-    BatchStarted { feeds: usize },
-    FeedRefreshed { feed: FeedId, new_items: u64 },
-    FeedFailed { feed: FeedId, error: String },
-    BatchFinished { health: BatchHealth },
+    BatchStarted {
+        feeds: usize,
+    },
+    /// `feed` is the feed's slug, the same one its URL uses.
+    FeedRefreshed {
+        feed: String,
+        new_items: u64,
+    },
+    FeedFailed {
+        feed: String,
+        error: String,
+    },
+    BatchFinished {
+        health: BatchHealth,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -284,7 +295,7 @@ async fn record_success(
         }
     };
     let _ = events.send(PollerEvent::FeedRefreshed {
-        feed: feed.id,
+        feed: feed.slug.clone(),
         new_items,
     });
     Ok(())
@@ -320,7 +331,7 @@ async fn record_failure(
     };
     db.record_fetch(feed.id, record, now, next).await?;
     let _ = events.send(PollerEvent::FeedFailed {
-        feed: feed.id,
+        feed: feed.slug.clone(),
         error: message,
     });
     Ok(())

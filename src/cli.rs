@@ -177,7 +177,7 @@ async fn refresh(db: Db) -> anyhow::Result<()> {
         .iter()
         .map(|f| {
             (
-                f.id,
+                f.slug.clone(),
                 f.custom_title.clone().unwrap_or_else(|| f.title.clone()),
             )
         })

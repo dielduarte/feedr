@@ -165,7 +165,7 @@ mod batch {
             [
                 PollerEvent::BatchStarted { feeds: 1 },
                 PollerEvent::FeedRefreshed {
-                    feed: feed.id,
+                    feed: feed.slug.clone(),
                     new_items: 4
                 },
                 PollerEvent::BatchFinished {
@@ -202,7 +202,7 @@ mod batch {
             Some("server responded with 404")
         );
         assert!(events.contains(&PollerEvent::FeedFailed {
-            feed: missing.id,
+            feed: missing.slug.clone(),
             error: "server responded with 404".to_string()
         }));
     }
@@ -327,7 +327,7 @@ mod background {
         })
         .await
         .unwrap();
-        assert_eq!(refreshed, feed.id);
+        assert_eq!(refreshed, feed.slug);
         cancel.cancel();
     }
 

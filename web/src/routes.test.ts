@@ -1,36 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { itemPath, parseLocation, scopePath, type Scope } from './routes'
+import { articlePath, parseLocation, scopePath, type Scope } from './routes'
 
 const scopes: Scope[] = [
   { kind: 'all' },
   { kind: 'unread' },
   { kind: 'starred' },
-  { kind: 'folder', id: 3 },
-  { kind: 'feed', id: 7 },
+  { kind: 'folder', slug: 'engineering' },
+  { kind: 'feed', slug: 'cloudflare-blog' },
 ]
 
 describe('routes', () => {
   it('round-trips every scope through its path', () => {
     for (const scope of scopes) {
-      expect(parseLocation(scopePath(scope))).toEqual({ scope, itemId: null })
+      expect(parseLocation(scopePath(scope))).toEqual({ scope, article: null })
     }
   })
 
-  it('round-trips an open article within its scope', () => {
-    for (const scope of scopes) {
-      expect(parseLocation(itemPath(scope, 42))).toEqual({ scope, itemId: 42 })
-    }
-  })
-
-  it('uses readable paths', () => {
+  it('uses readable slug paths', () => {
     expect(scopePath({ kind: 'all' })).toBe('/')
-    expect(itemPath({ kind: 'all' }, 9)).toBe('/items/9')
-    expect(itemPath({ kind: 'folder', id: 3 }, 9)).toBe('/folders/3/items/9')
+    expect(scopePath({ kind: 'folder', slug: 'engineering' })).toBe('/folders/engineering')
+    expect(articlePath({ feed: 'cloudflare-blog', slug: 'saving-ram' })).toBe('/feeds/cloudflare-blog/saving-ram')
   })
 
-  it('falls back to all articles for unknown or malformed paths', () => {
-    expect(parseLocation('/nope')).toEqual({ scope: { kind: 'all' }, itemId: null })
-    expect(parseLocation('/feeds/abc')).toEqual({ scope: { kind: 'all' }, itemId: null })
-    expect(parseLocation('/feeds/7/items/x')).toEqual({ scope: { kind: 'feed', id: 7 }, itemId: null })
+  it('gives each article one address, inside its feed', () => {
+    expect(parseLocation('/feeds/cloudflare-blog/saving-ram')).toEqual({
+      scope: { kind: 'feed', slug: 'cloudflare-blog' },
+      article: { feed: 'cloudflare-blog', slug: 'saving-ram' },
+    })
+  })
+
+  it('decodes percent-encoded slugs', () => {
+    expect(parseLocation('/folders/caf%C3%A9').scope).toEqual({ kind: 'folder', slug: 'café' })
+  })
+
+  it('falls back to all articles for unknown paths', () => {
+    expect(parseLocation('/nope')).toEqual({ scope: { kind: 'all' }, article: null })
+    expect(parseLocation('/feeds')).toEqual({ scope: { kind: 'all' }, article: null })
+    expect(parseLocation('/feeds/a/b/c')).toEqual({ scope: { kind: 'all' }, article: null })
   })
 })

@@ -3,9 +3,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
+use super::feeds::Renamed;
 use super::{ApiError, AppState};
 use crate::db::{Folder, SidebarFeed};
-use crate::model::FolderId;
 
 #[derive(Serialize)]
 pub struct Sidebar {
@@ -16,7 +16,7 @@ pub struct Sidebar {
 
 #[derive(Serialize)]
 struct SidebarFolder {
-    id: FolderId,
+    slug: String,
     name: String,
     unread: u32,
     feeds: Vec<SidebarFeed>,
@@ -31,7 +31,7 @@ pub async fn sidebar(State(state): State<AppState>) -> Result<Json<Sidebar>, Api
             .into_iter()
             .map(|f| SidebarFolder {
                 unread: f.unread(),
-                id: f.folder.id,
+                slug: f.folder.slug,
                 name: f.folder.name,
                 feeds: f.feeds,
             })
@@ -55,11 +55,12 @@ pub async fn create(
 
 pub async fn rename(
     State(state): State<AppState>,
-    Path(id): Path<FolderId>,
+    Path(slug): Path<String>,
     Json(body): Json<Name>,
-) -> Result<StatusCode, ApiError> {
-    state.db.rename_folder(id, &body.name).await?;
-    Ok(StatusCode::NO_CONTENT)
+) -> Result<Json<Renamed>, ApiError> {
+    let id = state.db.folder_id(&slug).await?;
+    let slug = state.db.rename_folder(id, &body.name).await?;
+    Ok(Json(Renamed { slug }))
 }
 
 #[derive(Deserialize)]
@@ -69,17 +70,19 @@ pub struct Position {
 
 pub async fn move_to(
     State(state): State<AppState>,
-    Path(id): Path<FolderId>,
+    Path(slug): Path<String>,
     Json(body): Json<Position>,
 ) -> Result<StatusCode, ApiError> {
+    let id = state.db.folder_id(&slug).await?;
     state.db.move_folder(id, body.index).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete(
     State(state): State<AppState>,
-    Path(id): Path<FolderId>,
+    Path(slug): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let id = state.db.folder_id(&slug).await?;
     state.db.delete_folder(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

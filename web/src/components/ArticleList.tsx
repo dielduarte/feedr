@@ -6,26 +6,27 @@ import { useNow } from '@/hooks/use-now'
 import { cn } from '@/lib/utils'
 import type { ItemSummary } from '../api'
 import { fullDate, relativeTime } from '../format'
-import { itemPath, type Scope } from '../routes'
+import { refOf } from '../queries'
+import { articleKey, articlePath } from '../routes'
 
 type Props = {
-  scope: Scope
   items: ItemSummary[]
-  selectedId: number | null
+  /** `feed/slug` of the selected article. */
+  selectedKey: string | null
   hasMore: boolean
   onLoadMore: () => void
   onToggleStar: (item: ItemSummary) => void
 }
 
-export function ArticleList({ scope, items, selectedId, hasMore, onLoadMore, onToggleStar }: Props) {
+export function ArticleList({ items, selectedKey, hasMore, onLoadMore, onToggleStar }: Props) {
   const now = useNow()
   const list = useRef<HTMLOListElement>(null)
   const sentinel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (selectedId === null) return
-    list.current?.querySelector(`[data-id="${selectedId}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [selectedId])
+    if (selectedKey === null) return
+    list.current?.querySelector(`[data-key="${CSS.escape(selectedKey)}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [selectedKey])
 
   useEffect(() => {
     const node = sentinel.current
@@ -40,16 +41,21 @@ export function ArticleList({ scope, items, selectedId, hasMore, onLoadMore, onT
   return (
     <>
       <ol ref={list} className="-mx-3">
-        {items.map((item) => (
-          <ArticleRow
-            key={item.id}
-            item={item}
-            href={itemPath(scope, item.id)}
-            selected={item.id === selectedId}
-            now={now}
-            onToggleStar={onToggleStar}
-          />
-        ))}
+        {items.map((item) => {
+          const ref = refOf(item)
+          const key = articleKey(ref)
+          return (
+            <ArticleRow
+              key={key}
+              rowKey={key}
+              item={item}
+              href={articlePath(ref)}
+              selected={key === selectedKey}
+              now={now}
+              onToggleStar={onToggleStar}
+            />
+          )
+        })}
       </ol>
       {hasMore ? <div ref={sentinel} className="h-px" aria-hidden /> : null}
     </>
@@ -57,6 +63,7 @@ export function ArticleList({ scope, items, selectedId, hasMore, onLoadMore, onT
 }
 
 type RowProps = {
+  rowKey: string
   item: ItemSummary
   href: string
   selected: boolean
@@ -65,13 +72,13 @@ type RowProps = {
 }
 
 /** Memoized so marking one article read or moving the selection re-renders only the rows involved. */
-const ArticleRow = memo(function ArticleRow({ item, href, selected, now, onToggleStar }: RowProps) {
+const ArticleRow = memo(function ArticleRow({ rowKey, item, href, selected, now, onToggleStar }: RowProps) {
   const unread = item.read_at === null
   const published = new Date(item.published_at)
 
   return (
     <li
-      data-id={item.id}
+      data-key={rowKey}
       // Rows far off-screen skip layout and paint until scrolled near.
       className="group/article relative [contain-intrinsic-size:auto_112px] [content-visibility:auto]"
     >

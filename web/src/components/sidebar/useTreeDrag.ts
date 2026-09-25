@@ -2,13 +2,13 @@ import { type DragEvent, useState } from 'react'
 import type { SidebarFeed, SidebarFolder } from '../../api'
 import { dropIndex } from '../../reorder'
 
-type Dragging = { kind: 'feed'; id: number } | { kind: 'folder'; id: number } | null
+type Dragging = { kind: 'feed'; slug: string } | { kind: 'folder'; slug: string } | null
 
 type Options = {
   folders: SidebarFolder[]
   uncategorized: SidebarFeed[]
-  onMoveFeed: (move: { id: number; folderId: number | null; index: number }) => void
-  onMoveFolder: (move: { id: number; index: number }) => void
+  onMoveFeed: (move: { slug: string; folder: string | null; index: number }) => void
+  onMoveFolder: (move: { slug: string; index: number }) => void
 }
 
 /** Drag-and-drop for the subscription tree: feeds into folders or between feeds, folders among folders. */
@@ -46,9 +46,9 @@ export function useTreeDrag({ folders, uncategorized, onMoveFeed, onMoveFolder }
     },
   })
 
-  const dropFeed = (folderId: number | null, siblings: SidebarFeed[], before: number | 'end') => {
+  const dropFeed = (folder: string | null, siblings: SidebarFeed[], before: string | 'end') => {
     if (dragging?.kind !== 'feed') return
-    onMoveFeed({ id: dragging.id, folderId, index: dropIndex(siblings.map((f) => f.id), dragging.id, before) })
+    onMoveFeed({ slug: dragging.slug, folder, index: dropIndex(siblings.map((f) => f.slug), dragging.slug, before) })
   }
 
   return {
@@ -60,22 +60,22 @@ export function useTreeDrag({ folders, uncategorized, onMoveFeed, onMoveFolder }
     dropsInto: (key: string) => over === key && key.startsWith('folder:') && dragging?.kind === 'feed',
     overOutOfFolder: over === 'uncategorized',
 
-    feed: (feed: SidebarFeed, folderId: number | null, siblings: SidebarFeed[]) => ({
-      ...source({ kind: 'feed', id: feed.id }, feed.title),
-      ...target(`feed:${feed.id}`, dragging?.kind === 'feed' && dragging.id !== feed.id, () =>
-        dropFeed(folderId, siblings, feed.id),
+    feed: (feed: SidebarFeed, folder: string | null, siblings: SidebarFeed[]) => ({
+      ...source({ kind: 'feed', slug: feed.slug }, feed.title),
+      ...target(`feed:${feed.slug}`, dragging?.kind === 'feed' && dragging.slug !== feed.slug, () =>
+        dropFeed(folder, siblings, feed.slug),
       ),
     }),
 
     folder: (folder: SidebarFolder) => ({
-      ...source({ kind: 'folder', id: folder.id }, folder.name),
+      ...source({ kind: 'folder', slug: folder.slug }, folder.name),
       ...target(
-        `folder:${folder.id}`,
-        dragging !== null && !(dragging.kind === 'folder' && dragging.id === folder.id),
+        `folder:${folder.slug}`,
+        dragging !== null && !(dragging.kind === 'folder' && dragging.slug === folder.slug),
         () => {
-          if (dragging?.kind === 'feed') dropFeed(folder.id, folder.feeds, 'end')
+          if (dragging?.kind === 'feed') dropFeed(folder.slug, folder.feeds, 'end')
           if (dragging?.kind === 'folder') {
-            onMoveFolder({ id: dragging.id, index: dropIndex(folders.map((f) => f.id), dragging.id, folder.id) })
+            onMoveFolder({ slug: dragging.slug, index: dropIndex(folders.map((f) => f.slug), dragging.slug, folder.slug) })
           }
         },
       ),

@@ -37,14 +37,20 @@ pub struct Page {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ItemSummary {
+    #[serde(skip)]
     pub id: ItemId,
+    #[serde(skip)]
     pub feed_id: FeedId,
+    pub slug: String,
+    pub feed_slug: String,
     pub feed_title: String,
     pub url: Option<Url>,
     pub title: Option<String>,
     pub author: Option<String>,
     pub summary: Option<String>,
     pub published_at: DateTime<Utc>,
+    /// When feedrsauros stored it; "mark all read" uses this to spare articles that arrived later.
+    pub fetched_at: DateTime<Utc>,
     pub read_at: Option<DateTime<Utc>>,
     pub starred_at: Option<DateTime<Utc>>,
 }
@@ -61,12 +67,15 @@ pub struct Item {
 struct SummaryRow {
     id: ItemId,
     feed_id: FeedId,
+    slug: String,
+    feed_slug: String,
     feed_title: String,
     url: Option<String>,
     title: Option<String>,
     author: Option<String>,
     summary: Option<String>,
     published_at: i64,
+    fetched_at: i64,
     read_at: Option<i64>,
     starred_at: Option<i64>,
 }
@@ -76,12 +85,15 @@ impl From<SummaryRow> for ItemSummary {
         Self {
             id: row.id,
             feed_id: row.feed_id,
+            slug: row.slug,
+            feed_slug: row.feed_slug,
             feed_title: row.feed_title,
             url: parse_optional_url(row.url),
             title: row.title,
             author: row.author,
             summary: row.summary,
             published_at: from_ts(row.published_at),
+            fetched_at: from_ts(row.fetched_at),
             read_at: row.read_at.map(from_ts),
             starred_at: row.starred_at.map(from_ts),
         }
@@ -111,8 +123,10 @@ impl Db {
     pub async fn list_items(&self, query: ItemQuery) -> Result<Page, DbError> {
         let limit = query.limit as usize;
         let mut sql = QueryBuilder::new(
-            "SELECT items.id, items.feed_id, COALESCE(feeds.custom_title, feeds.title) AS feed_title,
-                    items.url, items.title, items.author, items.summary, items.published_at, items.read_at, items.starred_at
+            "SELECT items.id, items.feed_id, items.slug, feeds.slug AS feed_slug,
+                    COALESCE(feeds.custom_title, feeds.title) AS feed_title,
+                    items.url, items.title, items.author, items.summary, items.published_at, items.fetched_at,
+                    items.read_at, items.starred_at
              FROM items JOIN feeds ON feeds.id = items.feed_id
              WHERE 1 = 1",
         );
@@ -152,9 +166,10 @@ impl Db {
 
     pub async fn get_item(&self, id: ItemId) -> Result<Item, DbError> {
         let row = sqlx::query!(
-            r#"SELECT items.id AS "id: ItemId", items.feed_id AS "feed_id: FeedId",
-                      COALESCE(feeds.custom_title, feeds.title) AS "feed_title!: String",
-                      items.url, items.title, items.author, items.summary, items.published_at, items.read_at, items.starred_at,
+            r#"SELECT items.id AS "id: ItemId", items.feed_id AS "feed_id: FeedId", items.slug,
+                      feeds.slug AS feed_slug, COALESCE(feeds.custom_title, feeds.title) AS "feed_title!: String",
+                      items.url, items.title, items.author, items.summary, items.published_at, items.fetched_at,
+                      items.read_at, items.starred_at,
                       items.content_html
                FROM items JOIN feeds ON feeds.id = items.feed_id
                WHERE items.id = ?"#,
@@ -167,12 +182,15 @@ impl Db {
             summary: SummaryRow {
                 id: row.id,
                 feed_id: row.feed_id,
+                slug: row.slug,
+                feed_slug: row.feed_slug,
                 feed_title: row.feed_title,
                 url: row.url,
                 title: row.title,
                 author: row.author,
                 summary: row.summary,
                 published_at: row.published_at,
+                fetched_at: row.fetched_at,
                 read_at: row.read_at,
                 starred_at: row.starred_at,
             }
@@ -205,13 +223,29 @@ impl Db {
         )
     }
 
-    /// Item ids grow with insertion, so `up_to` (the newest id the user has seen) spares
-    /// items fetched after that, even when their publish date is older.
-    pub async fn mark_read(&self, scope: ItemScope, up_to: ItemId) -> Result<u64, DbError> {
+    pub async fn item_id(&self, feed_slug: &str, slug: &str) -> Result<ItemId, DbError> {
+        sqlx::query_scalar!(
+            r#"SELECT items.id AS "id: ItemId" FROM items JOIN feeds ON feeds.id = items.feed_id
+               WHERE feeds.slug = ? AND items.slug = ?"#,
+            feed_slug,
+            slug
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(DbError::NotFound)
+    }
+
+    /// Marks read what was already stored when the reader looked (`seen_until`, the newest
+    /// `fetched_at` they had), sparing articles that arrived since, even older-dated ones.
+    pub async fn mark_read(
+        &self,
+        scope: ItemScope,
+        seen_until: DateTime<Utc>,
+    ) -> Result<u64, DbError> {
         let mut sql = QueryBuilder::new(
-            "UPDATE items SET read_at = unixepoch() WHERE items.read_at IS NULL AND items.id <= ",
+            "UPDATE items SET read_at = unixepoch() WHERE items.read_at IS NULL AND items.fetched_at <= ",
         );
-        sql.push_bind(up_to);
+        sql.push_bind(ts(seen_until));
         push_scope(&mut sql, scope);
         Ok(sql.build().execute(&self.pool).await?.rows_affected())
     }

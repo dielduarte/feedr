@@ -12,16 +12,17 @@ const NO_FOLDER = 'none'
 
 type Props = {
   sidebar: Sidebar | undefined
-  defaultFolder: number | null
+  /** Slug of the folder to preselect. */
+  defaultFolder: string | null
   onClose: () => void
-  onAdded: (feedId: number) => void
+  onAdded: (feedSlug: string) => void
 }
 
 export function AddFeedDialog({ sidebar, defaultFolder, onClose, onAdded }: Props) {
   const [url, setUrl] = useState('')
-  const [folder, setFolder] = useState(defaultFolder === null ? NO_FOLDER : String(defaultFolder))
+  const [folder, setFolder] = useState(defaultFolder ?? NO_FOLDER)
   const subscribe = useSidebarMutation(
-    (args: { url: string; folder: number | null }) => api.subscribe(args.url, args.folder),
+    (args: { url: string; folder: string | null }) => api.subscribe(args.url, args.folder),
     { inlineErrors: true },
   )
   const address = url.trim()
@@ -30,8 +31,8 @@ export function AddFeedDialog({ sidebar, defaultFolder, onClose, onAdded }: Prop
     event.preventDefault()
     if (!address) return
     subscribe.mutate(
-      { url: address, folder: folder === NO_FOLDER ? null : Number(folder) },
-      { onSuccess: (added) => onAdded(added.id) },
+      { url: address, folder: folder === NO_FOLDER ? null : folder },
+      { onSuccess: (added) => onAdded(added.slug) },
     )
   }
 
@@ -63,7 +64,7 @@ export function AddFeedDialog({ sidebar, defaultFolder, onClose, onAdded }: Prop
               <SelectContent className="dark">
                 <SelectItem value={NO_FOLDER}>No folder</SelectItem>
                 {sidebar.folders.map((f) => (
-                  <SelectItem key={f.id} value={String(f.id)}>
+                  <SelectItem key={f.slug} value={f.slug}>
                     {f.name}
                   </SelectItem>
                 ))}

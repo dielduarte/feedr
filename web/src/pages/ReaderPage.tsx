@@ -6,23 +6,29 @@ import { Reader } from '../components/Reader'
 import { ReaderActions, TopBar } from '../components/TopBar'
 import { wordCount } from '../format'
 import { nearEnd, neighbour } from '../navigation'
-import { useItem, useItems, useUpdateItem } from '../queries'
+import { refOf, useItem, useItems, useUpdateItem } from '../queries'
+import { type ArticleRef, articleKey } from '../routes'
 
 const PREFETCH_ROWS = 5
 
 type Props = {
   chrome: Chrome
-  itemId: number
+  article: ArticleRef
   unreadOnly: boolean
   onBack: () => void
-  onOpen: (id: number) => void
+  onOpen: (article: ArticleRef) => void
 }
 
-export function ReaderPage({ chrome, itemId, unreadOnly, onBack, onOpen }: Props) {
-  const { data: item, isError } = useItem(itemId)
+export function ReaderPage({ chrome, article, unreadOnly, onBack, onOpen }: Props) {
+  const current = articleKey(article)
+  const { data: item, isError } = useItem(article)
   // The list this article was opened from, for moving to the next and previous one.
   const { items, hasNextPage, isFetchingNextPage, fetchNextPage } = useItems(chrome.scope, unreadOnly)
-  const ids = useMemo(() => items.map((i) => i.id), [items])
+  const { keys, byKey } = useMemo(() => {
+    const byKey = new Map<string, ArticleRef>()
+    for (const listed of items) byKey.set(articleKey(refOf(listed)), refOf(listed))
+    return { keys: [...byKey.keys()], byKey }
+  }, [items])
   const updateItem = useUpdateItem()
   const scroller = useRef<HTMLDivElement>(null)
   const html = item?.content_html
@@ -30,24 +36,25 @@ export function ReaderPage({ chrome, itemId, unreadOnly, onBack, onOpen }: Props
 
   // Opening an article marks it read once, whether it was opened from the list or a link;
   // pressing M afterwards is respected.
-  const markedOnOpen = useRef<number | null>(null)
+  const markedOnOpen = useRef<string | null>(null)
   useEffect(() => {
-    if (item && !item.read_at && markedOnOpen.current !== item.id) {
-      markedOnOpen.current = item.id
+    if (item && !item.read_at && markedOnOpen.current !== articleKey(refOf(item))) {
+      markedOnOpen.current = articleKey(refOf(item))
       updateItem({ item, patch: { read: true } })
     }
   }, [item, updateItem])
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
-  }, [itemId])
+  }, [current])
 
   useDocumentTitle(item?.title ?? chrome.label, chrome.sidebar?.total_unread ?? 0)
 
   const step = (delta: number) => {
-    const next = neighbour(ids, itemId, delta)
-    if (next !== null) onOpen(next)
-    if (nearEnd(ids, next ?? itemId, PREFETCH_ROWS) && hasNextPage && !isFetchingNextPage) fetchNextPage()
+    const next = neighbour(keys, current, delta)
+    const nextArticle = next === null ? undefined : byKey.get(next)
+    if (nextArticle) onOpen(nextArticle)
+    if (nearEnd(keys, next ?? current, PREFETCH_ROWS) && hasNextPage && !isFetchingNextPage) fetchNextPage()
   }
   const toggleStar = () => item && updateItem({ item, patch: { starred: !item.starred_at } })
   const toggleRead = () => item && updateItem({ item, patch: { read: !item.read_at } })
@@ -75,7 +82,7 @@ export function ReaderPage({ chrome, itemId, unreadOnly, onBack, onOpen }: Props
         <Reader
           item={item}
           words={words}
-          siteUrl={item ? (chrome.lookup.feed(item.feed_id)?.site_url ?? null) : null}
+          siteUrl={item ? (chrome.lookup.feed(item.feed_slug)?.site_url ?? null) : null}
           missing={isError}
         />
       </div>

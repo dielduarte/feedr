@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 use sqlx::SqliteConnection;
 use url::Url;
@@ -5,6 +7,7 @@ use url::Url;
 use super::{Db, DbError, found, from_ts, place, ts};
 use crate::model::{FeedId, FolderId, Validators};
 use crate::parse::ParsedFeed;
+use crate::slugs::{slugify, unique_slug};
 
 #[derive(Debug, Clone)]
 pub struct NewFeed {
@@ -17,6 +20,7 @@ pub struct NewFeed {
 #[derive(Debug, Clone)]
 pub struct Feed {
     pub id: FeedId,
+    pub slug: String,
     pub folder: Option<FolderId>,
     pub url: Url,
     pub site_url: Option<Url>,
@@ -44,6 +48,7 @@ pub enum FetchRecord<'a> {
 
 struct FeedRow {
     id: FeedId,
+    slug: String,
     folder_id: Option<FolderId>,
     url: String,
     site_url: Option<String>,
@@ -62,6 +67,7 @@ impl TryFrom<FeedRow> for Feed {
     fn try_from(row: FeedRow) -> Result<Self, DbError> {
         Ok(Self {
             id: row.id,
+            slug: row.slug,
             folder: row.folder_id,
             url: parse_stored_url(&row.url)?,
             site_url: parse_optional_url(row.site_url),
@@ -94,7 +100,7 @@ impl Db {
     }
 
     /// Stores a feed together with its first fetch, so a subscription never exists without items.
-    /// Returns the feed id and how many items were stored.
+    /// Returns the new feed and how many items were stored.
     pub async fn subscribe(
         &self,
         new: NewFeed,
@@ -102,20 +108,20 @@ impl Db {
         validators: Validators,
         now: DateTime<Utc>,
         next_fetch_at: DateTime<Utc>,
-    ) -> Result<(FeedId, u64), DbError> {
+    ) -> Result<(Feed, u64), DbError> {
         let mut tx = self.pool.begin().await?;
-        let id = insert_feed(&mut tx, &new, now).await?.id;
+        let stored = insert_feed(&mut tx, &new, now).await?;
         let record = FetchRecord::Updated { feed, validators };
-        let inserted = apply_fetch(&mut tx, id, record, now, next_fetch_at).await?;
+        let inserted = apply_fetch(&mut tx, stored.id, record, now, next_fetch_at).await?;
         tx.commit().await?;
-        Ok((id, inserted))
+        Ok((stored, inserted))
     }
 
     pub async fn feeds_due(&self, now: DateTime<Utc>) -> Result<Vec<Feed>, DbError> {
         let now = ts(now);
         sqlx::query_as!(
             FeedRow,
-            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+            r#"SELECT id AS "id: FeedId", slug, folder_id AS "folder_id: FolderId", url, site_url, title,
                       custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error
                FROM feeds
                WHERE next_fetch_at <= ?
@@ -160,12 +166,38 @@ impl Db {
         Ok(())
     }
 
-    pub async fn set_custom_title(&self, id: FeedId, title: Option<&str>) -> Result<(), DbError> {
-        found(
-            sqlx::query!("UPDATE feeds SET custom_title = ? WHERE id = ?", title, id)
-                .execute(&self.pool)
-                .await?,
+    /// Returns the new slug: a feed's URL follows the name it's shown with.
+    pub async fn set_custom_title(
+        &self,
+        id: FeedId,
+        title: Option<&str>,
+    ) -> Result<String, DbError> {
+        let mut tx = self.pool.begin().await?;
+        let feed_title = sqlx::query_scalar!("SELECT title FROM feeds WHERE id = ?", id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(DbError::NotFound)?;
+        let slug = free_feed_slug(&mut tx, title.unwrap_or(&feed_title), Some(id)).await?;
+        sqlx::query!(
+            "UPDATE feeds SET custom_title = ?, slug = ? WHERE id = ?",
+            title,
+            slug,
+            id
         )
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(slug)
+    }
+
+    pub async fn feed_id(&self, slug: &str) -> Result<FeedId, DbError> {
+        sqlx::query_scalar!(
+            r#"SELECT id AS "id: FeedId" FROM feeds WHERE slug = ?"#,
+            slug
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(DbError::NotFound)
     }
 
     pub async fn delete_feed(&self, id: FeedId) -> Result<(), DbError> {
@@ -180,7 +212,7 @@ impl Db {
     pub async fn healthy_feeds(&self, limit: u32) -> Result<Vec<Feed>, DbError> {
         sqlx::query_as!(
             FeedRow,
-            r#"SELECT id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+            r#"SELECT id AS "id: FeedId", slug, folder_id AS "folder_id: FolderId", url, site_url, title,
                       custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error
                FROM feeds
                WHERE error_count = 0
@@ -215,20 +247,22 @@ async fn insert_feed(
     new: &NewFeed,
     now: DateTime<Utc>,
 ) -> Result<Feed, DbError> {
+    let slug = free_feed_slug(conn, &new.title, None).await?;
     let url = new.url.as_str();
     let site_url = new.site_url.as_ref().map(Url::as_str);
     let now = ts(now);
     sqlx::query_as!(
         FeedRow,
-        r#"INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at)
-           VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5)
-           RETURNING id AS "id: FeedId", folder_id AS "folder_id: FolderId", url, site_url, title,
+        r#"INSERT INTO feeds (folder_id, position, url, site_url, title, next_fetch_at, slug)
+           VALUES (?1, (SELECT COALESCE(MAX(position), -1) + 1 FROM feeds WHERE folder_id IS ?1), ?2, ?3, ?4, ?5, ?6)
+           RETURNING id AS "id: FeedId", slug, folder_id AS "folder_id: FolderId", url, site_url, title,
                      custom_title, etag, last_modified, next_fetch_at, error_count AS "error_count: u32", last_error"#,
         new.folder,
         url,
         site_url,
         new.title,
-        now
+        now,
+        slug
     )
     .fetch_one(conn)
     .await?
@@ -292,16 +326,28 @@ async fn apply_fetch(
                 .execute(&mut *conn)
                 .await?;
 
+                // Slugs only need to be unique within the feed; articles keep theirs forever.
+                let mut taken: HashSet<String> =
+                    sqlx::query_scalar!("SELECT slug FROM items WHERE feed_id = ?", id)
+                        .fetch_all(&mut *conn)
+                        .await?
+                        .into_iter()
+                        .collect();
+
                 for item in &feed.items {
+                    let slug = unique_slug(&slugify(item.title.as_deref().unwrap_or(""), "article"), |s| {
+                        taken.contains(s)
+                    });
                     let url = item.url.as_ref().map(Url::as_str);
                     let content = item.content.as_ref().map(|c| c.as_str());
                     let summary = item.summary.as_deref();
                     let published_at = ts(item.published_at);
-                    inserted += sqlx::query!(
-                        "INSERT INTO items (feed_id, guid, url, title, author, content_html, summary, published_at, fetched_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    let stored = sqlx::query!(
+                        "INSERT INTO items (feed_id, slug, guid, url, title, author, content_html, summary, published_at, fetched_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                          ON CONFLICT (feed_id, guid) DO NOTHING",
                         id,
+                        slug,
                         item.guid,
                         url,
                         item.title,
@@ -314,6 +360,10 @@ async fn apply_fetch(
                     .execute(&mut *conn)
                     .await?
                     .rows_affected();
+                    if stored > 0 {
+                        taken.insert(slug);
+                    }
+                    inserted += stored;
                 }
                 updated
             }
@@ -321,4 +371,23 @@ async fn apply_fetch(
 
     found(updated)?;
     Ok(inserted)
+}
+
+/// A slug for `title` that no other feed uses (`except` is the feed being renamed).
+async fn free_feed_slug(
+    conn: &mut SqliteConnection,
+    title: &str,
+    except: Option<FeedId>,
+) -> Result<String, DbError> {
+    let base = slugify(title, "feed");
+    let taken: HashSet<String> = sqlx::query_scalar!(
+        "SELECT slug FROM feeds WHERE (slug = ?1 OR slug LIKE ?1 || '-%') AND id IS NOT ?2",
+        base,
+        except
+    )
+    .fetch_all(conn)
+    .await?
+    .into_iter()
+    .collect();
+    Ok(unique_slug(&base, |slug| taken.contains(slug)))
 }

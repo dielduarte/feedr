@@ -8,7 +8,8 @@ import { EmptyList, Welcome } from '../components/EmptyStates'
 import { ListHeader } from '../components/ListHeader'
 import { ListActions, TopBar } from '../components/TopBar'
 import { moveSelection, nearEnd } from '../navigation'
-import { useItems, useMarkAllRead, useUpdateItem } from '../queries'
+import { refOf, useItems, useMarkAllRead, useUpdateItem } from '../queries'
+import { type ArticleRef, articleKey } from '../routes'
 
 /** Keep this many articles of headroom: reaching them loads the next page. */
 const PREFETCH_ROWS = 5
@@ -17,33 +18,35 @@ type Props = {
   chrome: Chrome
   unreadPreference: boolean
   onUnreadPreferenceChange: (unreadOnly: boolean) => void
-  /** The article last opened, so returning from it keeps your place. */
-  initialSelectedId: number | null
-  onOpen: (id: number) => void
+  /** `feed/slug` of the article last opened, so returning from it keeps your place. */
+  initialSelectedKey: string | null
+  onOpen: (article: ArticleRef) => void
   onAddFeed: () => void
   onImport: () => void
 }
 
-export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, initialSelectedId, onOpen, onAddFeed, onImport }: Props) {
+export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, initialSelectedKey, onOpen, onAddFeed, onImport }: Props) {
   const { scope, sidebar, lookup } = chrome
   const unreadOnly = listsUnreadOnly(scope, unreadPreference)
   const { items, isPending, hasNextPage, isFetchingNextPage, fetchNextPage } = useItems(scope, unreadOnly)
-  const [selectedId, setSelectedId] = useState(initialSelectedId)
+  const [selectedKey, setSelectedKey] = useState(initialSelectedKey)
   const updateItem = useUpdateItem()
   const markAllRead = useMarkAllRead()
 
-  const { ids, byId, newest } = useMemo(() => {
-    const ids: number[] = []
-    const byId = new Map<number, ItemSummary>()
-    let newest = 0
+  // One pass for everything keyboard navigation and "mark all read" need.
+  const { keys, byKey, seenUntil } = useMemo(() => {
+    const keys: string[] = []
+    const byKey = new Map<string, ItemSummary>()
+    let seenUntil: string | null = null
     for (const item of items) {
-      ids.push(item.id)
-      byId.set(item.id, item)
-      if (item.id > newest) newest = item.id
+      const key = articleKey(refOf(item))
+      keys.push(key)
+      byKey.set(key, item)
+      if (seenUntil === null || item.fetched_at > seenUntil) seenUntil = item.fetched_at
     }
-    return { ids, byId, newest }
+    return { keys, byKey, seenUntil }
   }, [items])
-  const selected = selectedId === null ? undefined : byId.get(selectedId)
+  const selected = selectedKey === null ? undefined : byKey.get(selectedKey)
 
   const loadMore = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage()
@@ -55,13 +58,13 @@ export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, i
   )
 
   const move = (step: number) => {
-    const next = moveSelection(ids, selectedId, step)
+    const next = moveSelection(keys, selectedKey, step)
     if (next === null) return
-    setSelectedId(next)
-    if (nearEnd(ids, next, PREFETCH_ROWS)) loadMore()
+    setSelectedKey(next)
+    if (nearEnd(keys, next, PREFETCH_ROWS)) loadMore()
   }
   const markAll = () => {
-    if (newest > 0) markAllRead({ scope, upTo: newest })
+    if (seenUntil !== null) markAllRead({ scope, seenUntil })
   }
 
   useShortcuts(
@@ -71,8 +74,8 @@ export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, i
       k: () => move(-1),
       ArrowDown: () => move(1),
       ArrowUp: () => move(-1),
-      Enter: () => selected && onOpen(selected.id),
-      o: () => selected && onOpen(selected.id),
+      Enter: () => selected && onOpen(refOf(selected)),
+      o: () => selected && onOpen(refOf(selected)),
       s: () => selected && toggleStar(selected),
       m: () => selected && updateItem({ item: selected, patch: { read: !selected.read_at } }),
       v: () => selected?.url && window.open(selected.url, '_blank', 'noopener'),
@@ -89,7 +92,7 @@ export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, i
           unreadOnly={unreadOnly}
           canFilterUnread={scope.kind !== 'unread' && scope.kind !== 'starred'}
           onUnreadOnlyChange={onUnreadPreferenceChange}
-          canMarkAllRead={newest > 0 && scope.kind !== 'starred'}
+          canMarkAllRead={seenUntil !== null && scope.kind !== 'starred'}
           onMarkAllRead={markAll}
         />
       </TopBar>
@@ -98,9 +101,8 @@ export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, i
           <ListHeader heading={chrome.label} scope={scope} sidebar={sidebar} lookup={lookup} />
           {isPending ? null : items.length > 0 ? (
             <ArticleList
-              scope={scope}
               items={items}
-              selectedId={selectedId}
+              selectedKey={selectedKey}
               hasMore={!!hasNextPage}
               onLoadMore={loadMore}
               onToggleStar={toggleStar}

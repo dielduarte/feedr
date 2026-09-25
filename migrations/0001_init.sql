@@ -1,11 +1,13 @@
 CREATE TABLE folders (
   id        INTEGER PRIMARY KEY,
+  slug      TEXT NOT NULL UNIQUE,
   name      TEXT NOT NULL UNIQUE,
   position  INTEGER NOT NULL
 );
 
 CREATE TABLE feeds (
   id             INTEGER PRIMARY KEY,
+  slug           TEXT NOT NULL UNIQUE,
   folder_id      INTEGER REFERENCES folders(id) ON DELETE SET NULL,
   position       INTEGER NOT NULL,
   url            TEXT NOT NULL UNIQUE,
@@ -22,16 +24,19 @@ CREATE TABLE feeds (
 CREATE TABLE items (
   id            INTEGER PRIMARY KEY,
   feed_id       INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+  slug          TEXT NOT NULL,
   guid          TEXT NOT NULL,
   url           TEXT,
   title         TEXT,
   author        TEXT,
   content_html  TEXT,
+  summary       TEXT,
   published_at  INTEGER NOT NULL,
   fetched_at    INTEGER NOT NULL,
   read_at       INTEGER,
   starred_at    INTEGER,
-  UNIQUE (feed_id, guid)
+  UNIQUE (feed_id, guid),
+  UNIQUE (feed_id, slug)
 );
 
 CREATE INDEX items_timeline ON items(published_at DESC, id DESC);
