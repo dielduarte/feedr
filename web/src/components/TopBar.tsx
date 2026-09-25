@@ -34,7 +34,7 @@ export function TopBar({ chrome, onBack, crumb, children }: Props) {
   const sidebarHidden = state === 'collapsed' || isMobile
 
   return (
-    <header className="grid h-13 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 border-b px-3">
+    <header className="grid h-13 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-3 border-b px-3">
       <div className="flex min-w-0 items-center gap-2">
         {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
         {onBack ? (
