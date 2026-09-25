@@ -7,6 +7,8 @@ export interface SidebarFeed {
   site_url: string | null
   unread: number
   last_error: string | null
+  /** Client-only: shown while the feed is still being added. */
+  pending?: boolean
 }
 
 export interface SidebarFolder {

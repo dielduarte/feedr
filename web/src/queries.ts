@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { api, type Item, type ItemSummary, type Page, type Sidebar } from './api'
 import { sentence } from './format'
 import { buildLookup } from './lookup'
+import { withPendingFeed } from './pending'
 import { type ArticleRef, articleKey, scopePath, type Scope } from './routes'
 
 export const keys = {
@@ -29,8 +30,9 @@ export function useLookup(sidebar: Sidebar | undefined) {
   return useMemo(() => buildLookup(sidebar), [sidebar])
 }
 
-export function useItems(scope: Scope, unreadOnly: boolean) {
+export function useItems(scope: Scope, unreadOnly: boolean, { enabled = true } = {}) {
   const query = useInfiniteQuery({
+    enabled,
     queryKey: keys.items(scope, unreadOnly),
     queryFn: ({ pageParam }) => api.items(scope, unreadOnly, pageParam),
     initialPageParam: null as string | null,
@@ -166,4 +168,35 @@ export function useSubscriptionActions() {
     () => ({ moveFeed, moveFolder, renameFeed, renameFolder, createFolder, unsubscribe, deleteFolder }),
     [moveFeed, moveFolder, renameFeed, renameFolder, createFolder, unsubscribe, deleteFolder],
   )
+}
+
+export type NewSubscription = {
+  url: string
+  folder: string | null
+  /** The placeholder shown in the sidebar until the server answers. */
+  pending: { slug: string; title: string }
+}
+
+/**
+ * Subscribes without waiting: a placeholder row appears in the sidebar at once and is replaced by
+ * the real feed when the server answers, or removed if it fails.
+ */
+export function useAddFeed() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ url, folder }: NewSubscription) => api.subscribe(url, folder),
+    onMutate: async ({ folder, pending }) => {
+      await client.cancelQueries({ queryKey: keys.sidebar })
+      const previous = client.getQueryData<Sidebar>(keys.sidebar)
+      if (previous) client.setQueryData<Sidebar>(keys.sidebar, withPendingFeed(previous, pending, folder))
+      return previous
+    },
+    onError: (_error, _variables, previous) => {
+      if (previous) client.setQueryData(keys.sidebar, previous)
+    },
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: keys.sidebar })
+      client.invalidateQueries({ queryKey: keys.allItems })
+    },
+  }).mutate
 }

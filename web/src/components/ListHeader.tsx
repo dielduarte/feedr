@@ -20,7 +20,7 @@ export function ListHeader({ heading, scope, sidebar, lookup }: Props) {
     const folder = lookup.folder(scope.slug)
     if (folder) details.push(`${folder.unread} unread in ${folder.feeds.length} ${folder.feeds.length === 1 ? 'feed' : 'feeds'}`)
   }
-  if (feed) {
+  if (feed && !feed.pending) {
     details.push(`${feed.unread} unread`)
     if (feed.site_url) {
       details.push(

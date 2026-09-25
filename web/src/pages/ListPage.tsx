@@ -4,10 +4,12 @@ import { useShortcuts } from '@/hooks/use-shortcuts'
 import { type ItemSummary, listsUnreadOnly } from '../api'
 import type { Chrome } from '../chrome'
 import { ArticleList } from '../components/ArticleList'
+import { DinoLoader } from '../components/DinoLoader'
 import { EmptyList, Welcome } from '../components/EmptyStates'
 import { ListHeader } from '../components/ListHeader'
 import { ListActions, TopBar } from '../components/TopBar'
 import { moveSelection, nearEnd } from '../navigation'
+import { isPendingSlug } from '../pending'
 import { refOf, useItems, useMarkAllRead, useUpdateItem } from '../queries'
 import { type ArticleRef, articleKey } from '../routes'
 
@@ -28,7 +30,8 @@ type Props = {
 export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, initialSelectedKey, onOpen, onAddFeed, onImport }: Props) {
   const { scope, sidebar, lookup } = chrome
   const unreadOnly = listsUnreadOnly(scope, unreadPreference)
-  const { items, isPending, hasNextPage, isFetchingNextPage, fetchNextPage } = useItems(scope, unreadOnly)
+  const subscribing = scope.kind === 'feed' && isPendingSlug(scope.slug)
+  const { items, isPending, hasNextPage, isFetchingNextPage, fetchNextPage } = useItems(scope, unreadOnly, { enabled: !subscribing })
   const [selectedKey, setSelectedKey] = useState(initialSelectedKey)
   const updateItem = useUpdateItem()
   const markAllRead = useMarkAllRead()
@@ -99,7 +102,9 @@ export function ListPage({ chrome, unreadPreference, onUnreadPreferenceChange, i
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-190 px-8 pt-11 pb-24 max-md:px-5">
           <ListHeader heading={chrome.label} scope={scope} sidebar={sidebar} lookup={lookup} />
-          {isPending ? null : items.length > 0 ? (
+          {subscribing ? (
+            <DinoLoader label={`Looking for the feed on ${chrome.label}…`} />
+          ) : isPending ? null : items.length > 0 ? (
             <ArticleList
               items={items}
               selectedKey={selectedKey}

@@ -3,37 +3,30 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { api, type Sidebar } from '../../api'
-import { sentence } from '../../format'
-import { useSidebarMutation } from '../../queries'
+import type { Sidebar } from '../../api'
 import { panel } from './panel'
 
 const NO_FOLDER = 'none'
 
 type Props = {
   sidebar: Sidebar | undefined
+  /** Pre-filled when trying again after a failed add. */
+  initialUrl: string
   /** Slug of the folder to preselect. */
   defaultFolder: string | null
   onClose: () => void
-  onAdded: (feedSlug: string) => void
+  /** The dialog closes straight away; the feed is added in the background. */
+  onSubmit: (url: string, folder: string | null) => void
 }
 
-export function AddFeedDialog({ sidebar, defaultFolder, onClose, onAdded }: Props) {
-  const [url, setUrl] = useState('')
+export function AddFeedDialog({ sidebar, initialUrl, defaultFolder, onClose, onSubmit }: Props) {
+  const [url, setUrl] = useState(initialUrl)
   const [folder, setFolder] = useState(defaultFolder ?? NO_FOLDER)
-  const subscribe = useSidebarMutation(
-    (args: { url: string; folder: string | null }) => api.subscribe(args.url, args.folder),
-    { inlineErrors: true },
-  )
   const address = url.trim()
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!address) return
-    subscribe.mutate(
-      { url: address, folder: folder === NO_FOLDER ? null : folder },
-      { onSuccess: (added) => onAdded(added.slug) },
-    )
+    if (address) onSubmit(address, folder === NO_FOLDER ? null : folder)
   }
 
   return (
@@ -72,16 +65,14 @@ export function AddFeedDialog({ sidebar, defaultFolder, onClose, onAdded }: Prop
             </Select>
           ) : null}
 
-          {subscribe.error ? <p className="text-sm text-destructive">{sentence(subscribe.error.message)}</p> : null}
-
           <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-2">
             <DialogClose asChild>
               <Button type="button" variant="secondary">
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={subscribe.isPending || !address}>
-              {subscribe.isPending ? 'Adding…' : 'Add feed'}
+            <Button type="submit" disabled={!address}>
+              Add feed
             </Button>
           </DialogFooter>
         </form>

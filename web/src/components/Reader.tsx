@@ -1,10 +1,10 @@
 import { ArrowUpRight } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Link } from 'wouter'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { Item } from '../api'
 import { fullDate, readingMinutes } from '../format'
 import { scopePath } from '../routes'
+import { DinoLoader } from './DinoLoader'
 import { FeedIcon } from './FeedIcon'
 
 type Props = {
@@ -44,15 +44,7 @@ export function Reader({ item, words, siteUrl, missing }: Props) {
   }
 
   if (!item) {
-    return (
-      <div className="mx-auto max-w-170 space-y-4 px-8 py-18" aria-busy>
-        <Skeleton className="h-10 w-4/5" />
-        <Skeleton className="h-4 w-2/5" />
-        <Skeleton className="mt-10 h-4 w-full" />
-        <Skeleton className="h-4 w-11/12" />
-        <Skeleton className="h-4 w-3/4" />
-      </div>
-    )
+    return <DinoLoader label="Loading the article…" />
   }
 
   return (

@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { useLocation } from 'wouter'
 import { SidebarInset, SidebarProvider, useSidebar } from '@/components/ui/sidebar'
 import { useStoredState } from '@/hooks/use-stored-state'
@@ -10,7 +11,9 @@ import { scopeLabel } from './lookup'
 import { ListPage } from './pages/ListPage'
 import { ReaderPage } from './pages/ReaderPage'
 import { usePoller } from './poller'
-import { useLookup, useSidebarData } from './queries'
+import { sentence } from './format'
+import { hostOf, pendingSlug } from './pending'
+import { useAddFeed, useLookup, useSidebarData } from './queries'
 import { type ArticleRef, articleKey, articlePath, parseLocation, scopePath, type Scope } from './routes'
 
 export function App() {
@@ -36,6 +39,9 @@ function Shell() {
   const { toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const [unreadPreference, setUnreadPreference] = useStoredState('unreadOnly', false)
   const [dialog, setDialog] = useState<DialogName | null>(null)
+  // What was typed in a failed add, so "Try again" reopens the dialog with it.
+  const [addDraft, setAddDraft] = useState<{ url: string; folder: string | null } | null>(null)
+  const addFeed = useAddFeed()
   const [lastOpenedKey, setLastOpenedKey] = useState<string | null>(null)
   const { status, refresh } = usePoller()
   const { data: sidebar } = useSidebarData()
@@ -71,7 +77,40 @@ function Shell() {
     [article, scope, setPath],
   )
   const backToList = useCallback(() => setPath(scopePath(scope)), [setPath, scope])
-  const closeDialog = useCallback(() => setDialog(null), [])
+  const closeDialog = useCallback(() => {
+    setDialog(null)
+    setAddDraft(null)
+  }, [])
+
+  // The dialog closes at once; a placeholder feed shows the dinosaur until the server answers.
+  const subscribe = (url: string, folder: string | null) => {
+    closeDialog()
+    const cameFrom = scope
+    const pending = { slug: pendingSlug(), title: hostOf(url) }
+    const pendingPath = scopePath({ kind: 'feed', slug: pending.slug })
+    const stillWaiting = () => window.location.pathname === pendingPath
+    addFeed(
+      { url, folder, pending },
+      {
+        onSuccess: (added) => {
+          if (stillWaiting()) setPath(scopePath({ kind: 'feed', slug: added.slug }), { replace: true })
+        },
+        onError: (error) => {
+          if (stillWaiting()) setPath(scopePath(cameFrom), { replace: true })
+          toast.error(sentence(error.message), {
+            action: {
+              label: 'Try again',
+              onClick: () => {
+                setAddDraft({ url, folder })
+                setDialog('add')
+              },
+            },
+          })
+        },
+      },
+    )
+    navigate({ kind: 'feed', slug: pending.slug })
+  }
 
   const chrome = useMemo<Chrome>(() => {
     const onRefresh = () => refresh(scope.kind === 'feed' || scope.kind === 'folder' ? scope : { kind: 'all' })
@@ -120,12 +159,10 @@ function Shell() {
         {dialog === 'add' ? (
           <AddFeedDialog
             sidebar={sidebar}
-            defaultFolder={scope.kind === 'folder' ? scope.slug : null}
+            initialUrl={addDraft?.url ?? ''}
+            defaultFolder={addDraft ? addDraft.folder : scope.kind === 'folder' ? scope.slug : null}
             onClose={closeDialog}
-            onAdded={(slug) => {
-              closeDialog()
-              navigate({ kind: 'feed', slug })
-            }}
+            onSubmit={subscribe}
           />
         ) : null}
         {dialog === 'transfer' ? <TransferDialog onClose={closeDialog} /> : null}
