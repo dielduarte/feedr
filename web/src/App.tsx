@@ -89,24 +89,22 @@ function Shell() {
     const pending = { slug: pendingSlug(), title: hostOf(url) }
     const pendingPath = scopePath({ kind: 'feed', slug: pending.slug })
     const stillWaiting = () => window.location.pathname === pendingPath
-    addFeed(
-      { url, folder, pending },
-      {
-        onSuccess: (added) => {
-          if (stillWaiting()) setPath(scopePath({ kind: 'feed', slug: added.slug }), { replace: true })
-        },
-        onError: (error) => {
-          if (stillWaiting()) setPath(scopePath(cameFrom), { replace: true })
-          toast.error(sentence(error.message), {
-            action: {
-              label: 'Try again',
-              onClick: () => {
-                setAddDraft({ url, folder })
-                setDialog('add')
-              },
+    // Promises rather than mutate callbacks: those only fire for the latest of several adds.
+    addFeed({ url, folder, pending }).then(
+      (added) => {
+        if (stillWaiting()) setPath(scopePath({ kind: 'feed', slug: added.slug }), { replace: true })
+      },
+      (error: Error) => {
+        if (stillWaiting()) setPath(scopePath(cameFrom), { replace: true })
+        toast.error(sentence(error.message), {
+          action: {
+            label: 'Try again',
+            onClick: () => {
+              setAddDraft({ url, folder })
+              setDialog('add')
             },
-          })
-        },
+          },
+        })
       },
     )
     navigate({ kind: 'feed', slug: pending.slug })

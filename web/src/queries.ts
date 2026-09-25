@@ -3,6 +3,7 @@ import {
   type QueryClient,
   useInfiniteQuery,
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
@@ -22,8 +23,18 @@ export const keys = {
   item: (article: ArticleRef) => ['item', articleKey(article)] as const,
 }
 
+/** The sidebar as the server knows it, plus a placeholder for every feed still being added. */
 export function useSidebarData() {
-  return useQuery({ queryKey: keys.sidebar, queryFn: api.sidebar })
+  const query = useQuery({ queryKey: keys.sidebar, queryFn: api.sidebar })
+  const adding = useMutationState({
+    filters: { mutationKey: addFeedKey, status: 'pending' },
+    select: (mutation) => mutation.state.variables as NewSubscription,
+  })
+  const data = useMemo(
+    () => query.data && adding.reduce((sidebar, { pending, folder }) => withPendingFeed(sidebar, pending, folder), query.data),
+    [query.data, adding],
+  )
+  return { ...query, data }
 }
 
 export function useLookup(sidebar: Sidebar | undefined) {
@@ -177,26 +188,22 @@ export type NewSubscription = {
   pending: { slug: string; title: string }
 }
 
+const addFeedKey = ['addFeed']
+
 /**
- * Subscribes without waiting: a placeholder row appears in the sidebar at once and is replaced by
- * the real feed when the server answers, or removed if it fails.
+ * Subscribes without waiting. The placeholder comes from the mutation itself rather than the cache,
+ * so several adds can run at once without one's refetch or rollback wiping out another's row.
  */
 export function useAddFeed() {
   const client = useQueryClient()
   return useMutation({
+    mutationKey: addFeedKey,
     mutationFn: ({ url, folder }: NewSubscription) => api.subscribe(url, folder),
-    onMutate: async ({ folder, pending }) => {
-      await client.cancelQueries({ queryKey: keys.sidebar })
-      const previous = client.getQueryData<Sidebar>(keys.sidebar)
-      if (previous) client.setQueryData<Sidebar>(keys.sidebar, withPendingFeed(previous, pending, folder))
-      return previous
-    },
-    onError: (_error, _variables, previous) => {
-      if (previous) client.setQueryData(keys.sidebar, previous)
-    },
-    onSettled: () => {
-      client.invalidateQueries({ queryKey: keys.sidebar })
-      client.invalidateQueries({ queryKey: keys.allItems })
-    },
-  }).mutate
+    // Awaited so the placeholder stays until the real feed has arrived in the sidebar.
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.sidebar }),
+        client.invalidateQueries({ queryKey: keys.allItems }),
+      ]),
+  }).mutateAsync
 }
