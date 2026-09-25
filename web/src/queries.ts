@@ -132,7 +132,12 @@ export function useUpdateItem() {
       if (saved) restore(client, saved)
       toast.error(sentence(error.message))
     },
-    onSettled: () => client.invalidateQueries({ queryKey: keys.sidebar }),
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: keys.sidebar })
+      // Other lists (Starred, Unread) may now include or drop this article. Only mark them stale:
+      // refetching the list on screen would pull rows out from under you as you read or unstar.
+      client.invalidateQueries({ queryKey: keys.allItems, refetchType: 'none' })
+    },
   }).mutate
 }
 

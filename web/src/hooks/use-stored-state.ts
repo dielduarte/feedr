@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { parseStored, storageKey } from '@/lib/storage'
 
 function load<T>(name: string, fallback: T): T {
@@ -9,22 +10,31 @@ function load<T>(name: string, fallback: T): T {
   }
 }
 
-/** A preference that survives reloads; storage failures keep the value in memory only. */
+/**
+ * A preference that survives reloads. It lives in the query cache so every component reading the
+ * same name updates together; storage failures keep the value in memory only.
+ */
 export function useStoredState<T>(name: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => load(name, fallback))
+  const client = useQueryClient()
+  const { data = fallback } = useQuery({
+    queryKey: ['stored', name],
+    queryFn: () => load(name, fallback),
+    initialData: () => load(name, fallback),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  })
   const update = useCallback(
     (next: T | ((previous: T) => T)) => {
-      setValue((previous) => {
-        const resolved = next instanceof Function ? next(previous) : next
-        try {
-          localStorage.setItem(storageKey(name), JSON.stringify(resolved))
-        } catch {
-          // Private mode or blocked storage.
-        }
-        return resolved
-      })
+      // The query exists while any component using it is mounted, so the cached value is current.
+      const resolved = next instanceof Function ? next(client.getQueryData<T>(['stored', name]) as T) : next
+      client.setQueryData<T>(['stored', name], resolved)
+      try {
+        localStorage.setItem(storageKey(name), JSON.stringify(resolved))
+      } catch {
+        // Private mode or blocked storage.
+      }
     },
-    [name],
+    [client, name],
   )
-  return [value, update] as const
+  return [data, update] as const
 }
