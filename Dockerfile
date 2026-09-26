@@ -14,10 +14,12 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY migrations migrations
 COPY src src
+# Only the manifest matters here: the desktop app is a workspace member but isn't built.
+COPY desktop desktop
 COPY --from=web /src/web/dist web/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --locked \
+    cargo build --release --locked --package feedrsauros \
     && cp target/release/feedrsauros /usr/local/bin/feedrsauros
 
 FROM debian:trixie-slim

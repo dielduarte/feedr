@@ -51,6 +51,7 @@ async fn feed(State(traffic): State<Arc<Traffic>>, Path(_name): Path<String>) ->
 }
 
 async fn slow_feed(State(traffic): State<Arc<Traffic>>, Path(_name): Path<String>) -> Vec<u8> {
+    traffic.requests.fetch_add(1, Ordering::SeqCst);
     let current = traffic.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
     traffic.max_in_flight.fetch_max(current, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -328,6 +329,101 @@ mod background {
         .await
         .unwrap();
         assert_eq!(refreshed, feed.slug);
+        cancel.cancel();
+    }
+
+    fn requests(env: &Env) -> usize {
+        env.traffic.requests.load(Ordering::SeqCst)
+    }
+
+    /// The same database file opened separately, as the CLI or a second server would.
+    async fn other_process(env: &Env) -> Db {
+        Db::open(&env._dir.path().join("feedrsauros.db")).await.unwrap()
+    }
+
+    async fn next_resync(events: &mut broadcast::Receiver<PollerEvent>) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while events.recv().await.unwrap() != PollerEvent::Resync {}
+        })
+        .await
+        .expect("no resync event");
+    }
+
+    #[tokio::test]
+    async fn pauses_while_inactive_and_catches_up_when_active_again() {
+        let env = env().await;
+        let (handle, cancel, _task) = start(&env).await;
+        handle.set_active(false);
+        env.add(env.base.join("feeds/a").unwrap(), Utc::now()).await;
+        handle.wake();
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(requests(&env), 0);
+
+        handle.set_active(true);
+        eventually("the feed is fetched after resuming", async || requests(&env) == 1).await;
+        cancel.cancel();
+    }
+
+    #[tokio::test]
+    async fn only_one_poller_fetches_from_a_database() {
+        let env = env().await;
+        for name in ["a", "b", "c"] {
+            env.add(env.base.join(&format!("slow/{name}")).unwrap(), Utc::now()).await;
+        }
+        let (_first, cancel, _task) = start(&env).await;
+        let other = CancellationToken::new();
+        let (_second, _second_task) = poller::spawn(other_process(&env).await, env.fetcher.clone(), other.clone());
+
+        eventually("every feed is fetched", async || requests(&env) >= 3).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        assert_eq!(requests(&env), 3);
+        cancel.cancel();
+        other.cancel();
+    }
+
+    #[tokio::test]
+    async fn takes_over_when_the_other_poller_stops() {
+        let env = env().await;
+        env.add(env.base.join("feeds/a").unwrap(), Utc::now()).await;
+        let (_first, cancel, task) = start(&env).await;
+        eventually("the first poller fetches", async || requests(&env) == 1).await;
+        let other = CancellationToken::new();
+        let (second, _second_task) = poller::spawn(other_process(&env).await, env.fetcher.clone(), other.clone());
+
+        cancel.cancel();
+        task.await.unwrap();
+        second.refresh(FeedScope::All).await.unwrap();
+
+        eventually("the second poller fetches", async || requests(&env) == 2).await;
+        other.cancel();
+    }
+
+    #[tokio::test]
+    async fn reports_changes_made_by_another_process() {
+        let env = env().await;
+        let (handle, cancel, _task) = start(&env).await;
+        let mut events = handle.subscribe();
+
+        other_process(&env).await.create_folder("From the CLI").await.unwrap();
+
+        next_resync(&mut events).await;
+        cancel.cancel();
+    }
+
+    #[tokio::test]
+    async fn does_not_report_its_own_changes() {
+        let env = env().await;
+        let (handle, cancel, _task) = start(&env).await;
+        let mut events = handle.subscribe();
+
+        env.db.create_folder("From the web app").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        while let Ok(event) = events.try_recv() {
+            assert_ne!(event, PollerEvent::Resync);
+        }
         cancel.cancel();
     }
 

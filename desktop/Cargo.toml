@@ -1,0 +1,14 @@
+[package]
+name = "feedrsauros-desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+feedrsauros = { path = ".." }
+open = "5.4.4"
+tauri = { version = "2.11", features = [] }
+tokio = { version = "1.53.1", features = ["net"] }
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }

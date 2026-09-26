@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use tokio::sync::{Notify, Semaphore, broadcast};
+use tokio::sync::{Notify, Semaphore, broadcast, watch};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -22,6 +24,7 @@ const OFFLINE_RETRY: Duration = Duration::from_secs(60);
 const MAX_SLEEP: Duration = Duration::from_secs(60);
 const MIN_SLEEP: Duration = Duration::from_secs(1);
 const PROBE_CANDIDATES: u32 = 10;
+const CHANGE_CHECK: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -41,6 +44,9 @@ pub enum PollerEvent {
     BatchFinished {
         health: BatchHealth,
     },
+    /// Something the stream didn't report changed the data, e.g. the CLI wrote to the database
+    /// or this client fell behind; reload everything.
+    Resync,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,9 +65,16 @@ pub struct PollerHandle {
     /// Weak so the channel closes when the poller stops, ending open event streams and letting
     /// the server shut down instead of waiting on them forever.
     events: broadcast::WeakSender<PollerEvent>,
+    active: watch::Sender<bool>,
 }
 
 impl PollerHandle {
+    /// While inactive nothing is fetched or checked; a batch already running finishes first.
+    /// Feeds that came due meanwhile are fetched as soon as it's active again.
+    pub fn set_active(&self, active: bool) {
+        self.active.send_replace(active);
+    }
+
     /// Returns how many feeds were scheduled.
     pub async fn refresh(&self, scope: FeedScope) -> Result<u64, DbError> {
         let scheduled = self.db.mark_due(scope, Utc::now()).await?;
@@ -90,13 +103,38 @@ pub fn spawn(
 ) -> (PollerHandle, JoinHandle<()>) {
     let (events, _) = broadcast::channel(256);
     let wake = Arc::new(Notify::new());
+    let (active, _) = watch::channel(true);
     let handle = PollerHandle {
         db: db.clone(),
         wake: wake.clone(),
         events: events.downgrade(),
+        active: active.clone(),
     };
-    let task = tokio::spawn(run(db, fetcher, wake, events, cancel));
+    let task = tokio::spawn(async move {
+        tokio::join!(
+            run(db.clone(), fetcher, wake, events.clone(), active.subscribe(), cancel.clone()),
+            watch_other_writers(db, events, active.subscribe(), cancel),
+        );
+    });
     (handle, task)
+}
+
+/// Resolves once active, or never if cancelled first.
+async fn until_active(active: &mut watch::Receiver<bool>, cancel: &CancellationToken) -> bool {
+    tokio::select! {
+        result = active.wait_for(|active| *active) => result.is_ok(),
+        () = cancel.cancelled() => false,
+    }
+}
+
+/// Only one process fetches from a database file at a time, so running the desktop app and
+/// `serve` together doesn't fetch every feed twice. The lock is released when the process exits.
+fn try_lock_polling(db: &Path) -> Option<File> {
+    let mut path = db.as_os_str().to_owned();
+    path.push(".poller.lock");
+    let file = File::options().create(true).truncate(false).write(true).open(path).ok()?;
+    file.try_lock().ok()?;
+    Some(file)
 }
 
 async fn run(
@@ -104,9 +142,27 @@ async fn run(
     fetcher: Fetcher,
     wake: Arc<Notify>,
     events: broadcast::Sender<PollerEvent>,
+    mut active: watch::Receiver<bool>,
     cancel: CancellationToken,
 ) {
+    let mut lock = None;
     loop {
+        if !until_active(&mut active, &cancel).await {
+            return;
+        }
+        if lock.is_none() {
+            lock = try_lock_polling(db.path());
+        }
+        if lock.is_none() {
+            // Another process is polling; try again later or when asked to refresh.
+            tokio::select! {
+                () = tokio::time::sleep(MAX_SLEEP) => {}
+                () = wake.notified() => {}
+                () = cancel.cancelled() => return,
+            }
+            continue;
+        }
+
         let now = Utc::now();
         let batch = async {
             match db.feeds_due(now).await {
@@ -127,6 +183,34 @@ async fn run(
         tokio::select! {
             () = tokio::time::sleep(time_until_next_due(&db).await) => {}
             () = wake.notified() => {}
+            () = cancel.cancelled() => return,
+        }
+    }
+}
+
+/// The UI only hears about what this process does, so writes from another process, like the CLI,
+/// are announced as a resync.
+async fn watch_other_writers(
+    db: Db,
+    events: broadcast::Sender<PollerEvent>,
+    mut active: watch::Receiver<bool>,
+    cancel: CancellationToken,
+) {
+    let mut seen = db.data_version().await.ok();
+    loop {
+        if !until_active(&mut active, &cancel).await {
+            return;
+        }
+        match db.data_version().await {
+            Ok(version) if seen.is_some_and(|seen| seen != version) => {
+                seen = Some(version);
+                let _ = events.send(PollerEvent::Resync);
+            }
+            Ok(version) => seen = Some(version),
+            Err(error) => tracing::warn!(%error, "could not check for outside changes"),
+        }
+        tokio::select! {
+            () = tokio::time::sleep(CHANGE_CHECK) => {}
             () = cancel.cancelled() => return,
         }
     }

@@ -86,3 +86,12 @@ pnpm --dir web test           # frontend unit tests
 feedrsauros serve                   # API on :7777 …
 pnpm --dir web dev            # … and the web app with hot reload, proxying /api to it
 ```
+
+### Desktop app
+
+The desktop app (in `desktop/`, built with [Tauri](https://tauri.app)) runs the same server and web app inside a native window. It uses the same database as the CLI, so feeds you add from the terminal show up in it, and it only polls while its window is focused.
+
+```bash
+pnpm --dir web build                  # the window shows the built web app
+cargo run -p feedrsauros-desktop      # FEEDRSAUROS_DB=… to point it at another database
+```

@@ -4,7 +4,8 @@ mod items;
 mod polling;
 mod sidebar;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -42,6 +43,7 @@ impl From<sqlx::Error> for DbError {
 #[derive(Debug, Clone)]
 pub struct Db {
     pool: SqlitePool,
+    path: Arc<PathBuf>,
 }
 
 impl Db {
@@ -52,9 +54,28 @@ impl Db {
             .journal_mode(SqliteJournalMode::Wal)
             .foreign_keys(true)
             .busy_timeout(Duration::from_secs(5));
-        let pool = SqlitePoolOptions::new().connect_with(options).await?;
+        // One connection that is never recycled: SQLite's `data_version` then changes only when
+        // another process writes, which is how the server notices changes made by the CLI.
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .connect_with(options)
+            .await?;
         sqlx::migrate!().run(&pool).await?;
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            path: Arc::new(path.to_path_buf()),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Changes whenever another process commits to the database; this process's writes don't.
+    pub async fn data_version(&self) -> Result<i64, DbError> {
+        Ok(sqlx::query_scalar("PRAGMA data_version").fetch_one(&self.pool).await?)
     }
 }
 

@@ -7,15 +7,14 @@ use chrono::Utc;
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use tokio::sync::broadcast::{self, error::RecvError};
-use tokio_util::sync::CancellationToken;
 
 use crate::add_feed::{add_feed, parse_input};
-use crate::api::{self, AppState};
 use crate::db::{Db, SidebarFeed};
 use crate::fetch::{DEFAULT_TIMEOUT, Fetcher};
 use crate::model::FeedScope;
 use crate::opml;
-use crate::poller::{self, BatchHealth, PollerEvent, run_batch};
+use crate::poller::{BatchHealth, PollerEvent, run_batch};
+use crate::server;
 
 #[derive(Parser)]
 #[command(name = "feedrsauros", version, about = "A local-first RSS reader")]
@@ -76,7 +75,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     }
 }
 
-fn database_path(explicit: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+/// `explicit`, or the file in the platform's data directory that every feedrsauros program shares.
+pub fn database_path(explicit: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     let path = match explicit {
         Some(path) => path,
         None => ProjectDirs::from("", "", "feedrsauros")
@@ -98,31 +98,17 @@ fn plural(count: impl Into<u64>, word: &str) -> String {
 }
 
 async fn serve(db: Db, host: IpAddr, port: u16, open: bool) -> anyhow::Result<()> {
-    let fetcher = Fetcher::new(DEFAULT_TIMEOUT);
-    let cancel = CancellationToken::new();
-    let (poller, poller_task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());
     let listener = tokio::net::TcpListener::bind((host, port))
         .await
         .with_context(|| format!("could not listen on {host}:{port}"))?;
-    let url = format!("http://{}", listener.local_addr()?);
+    let server = server::start(db, listener).await?;
+    let url = format!("http://{}", server.addr);
     println!("feedrsauros is running at {url}");
     if open && let Err(error) = open::that_detached(&url) {
         tracing::warn!(%error, "could not open a browser");
     }
-
-    let app = api::router(AppState {
-        db,
-        fetcher,
-        poller,
-    });
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            cancel.cancel();
-        })
-        .await?;
-    poller_task.await?;
-    Ok(())
+    shutdown_signal().await;
+    server.shutdown().await
 }
 
 async fn shutdown_signal() {
