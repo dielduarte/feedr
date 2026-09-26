@@ -144,10 +144,12 @@ export function useUpdateItem() {
       if (saved) restore(client, saved)
       toast.error(sentence(error.message))
     },
-    onSettled: () => {
+    onSettled: (_data, _error, { patch }) => {
       client.invalidateQueries({ queryKey: keys.sidebar })
-      // Other lists (Starred, Unread) may now include or drop this article. Only mark them stale:
-      // refetching the list on screen would pull rows out from under you as you read or unstar.
+      // A list refetch that started before the server saved this change would bring the old state
+      // back. Starred is refetched right away, cancelling any such fetch; Unread only goes stale so
+      // J/K keeps walking the list you're reading through.
+      if (patch.starred !== undefined) client.invalidateQueries({ queryKey: ['items', scopePath({ kind: 'starred' })] })
       client.invalidateQueries({ queryKey: keys.allItems, refetchType: 'none' })
     },
   }).mutate
