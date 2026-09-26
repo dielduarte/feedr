@@ -91,6 +91,17 @@ function patchItem(client: QueryClient, article: ArticleRef, patch: Partial<Item
   client.setQueryData<Item>(keys.item(article), (item) => item && { ...item, ...patch })
 }
 
+/** Drops an article from every cached page of one list, whichever unread filter it was loaded with. */
+export function removeFromList(client: QueryClient, scope: Scope, article: ArticleRef) {
+  const key = articleKey(article)
+  client.setQueriesData<InfiniteData<Page>>({ queryKey: ['items', scopePath(scope)] }, (data) =>
+    data && {
+      ...data,
+      pages: data.pages.map((page) => ({ ...page, items: page.items.filter((item) => articleKey(refOf(item)) !== key) })),
+    },
+  )
+}
+
 function adjustUnread(client: QueryClient, feedSlug: string, delta: number) {
   client.setQueryData<Sidebar>(keys.sidebar, (sidebar) => {
     if (!sidebar) return sidebar
@@ -125,6 +136,7 @@ export function useUpdateItem() {
       }
       if (patch.starred !== undefined) {
         patchItem(client, refOf(item), { starred_at: patch.starred ? now : null })
+        if (!patch.starred) removeFromList(client, { kind: 'starred' }, refOf(item))
       }
       return saved
     },
