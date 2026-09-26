@@ -6,7 +6,7 @@
     <title>feedrsauros — RSS isn't extinct</title>
     <meta
       name="description"
-      content="feedrsauros is a small RSS reader you run yourself. Follow the sites you like and read everything they publish in one calm place. No account, no algorithm, no tracking."
+      content="A quiet place to read the sites you love. No feed deciding what you see, no notifications, no endless scroll. Just what they wrote, waiting for you."
     />
     <meta name="theme-color" content="#fbfcfa" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
@@ -15,7 +15,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://feedrsauros.com/" />
     <meta property="og:title" content="feedrsauros — RSS isn't extinct" />
-    <meta property="og:description" content="A small RSS reader you run yourself. No account, no algorithm, no tracking." />
+    <meta property="og:description" content="A quiet place to read the sites you love. No feed deciding what you see, no notifications, no endless scroll. Just what they wrote, waiting for you." />
     <meta property="og:image" content="https://feedrsauros.com/screenshot-list.png" />
     <meta name="twitter:card" content="summary_large_image" />
 
@@ -220,31 +220,32 @@
         color: var(--muted);
       }
 
-      .features {
+      /* Three calm statements, read one after another rather than scanned as a grid. */
+      .peace {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 36px 48px;
-        margin: 48px 0 0;
+        gap: 48px;
+        margin: 56px 0 0;
         padding: 0;
         list-style: none;
       }
 
-      .features li {
-        padding-top: 18px;
-        border-top: 2px solid var(--mint);
+      .peace h3 {
+        margin: 0 0 10px;
+        font-size: 24px;
+        font-weight: 680;
+        letter-spacing: -0.02em;
       }
 
-      .features h3 {
-        margin: 0 0 6px;
-        font-size: 18px;
-        font-weight: 650;
-        letter-spacing: -0.01em;
-      }
-
-      .features p {
+      .peace p {
         margin: 0;
         color: var(--muted);
-        font-size: 16px;
+      }
+
+      .small-things {
+        margin: 28px 0 0;
+        color: var(--muted);
+        font-size: 15px;
       }
 
       kbd {
@@ -270,8 +271,18 @@
       /* Install */
 
       .install {
-        max-width: 640px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
         margin-top: 44px;
+      }
+
+      .install .button {
+        align-self: flex-start;
+      }
+
+      .install .note {
+        font-size: 14px;
       }
 
       .install article {
@@ -377,8 +388,13 @@
           width: 160px;
         }
 
-        .features {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .peace,
+        .install {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .peace {
+          gap: 32px;
         }
 
         section {
@@ -398,10 +414,6 @@
         .hero p {
           font-size: 18px;
         }
-
-        .features {
-          grid-template-columns: minmax(0, 1fr);
-        }
       }
     </style>
   </head>
@@ -414,8 +426,8 @@
           feedrsauros
         </a>
         <nav aria-label="Main">
-          <a href="#features">Features</a>
-          <a href="#install">Install</a>
+          <a href="#peace">Read in peace</a>
+          <a href="#install">Download</a>
           <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>
         </nav>
       </header>
@@ -425,11 +437,11 @@
           <div>
             <h1>RSS isn't extinct.</h1>
             <p>
-              feedrsauros is a small RSS reader you run yourself. Follow the sites you like and read everything they
-              publish in one calm place. No account, no algorithm, no tracking.
+              A quiet place to read the sites you love. No feed deciding what you see, no notifications, no endless
+              scroll. Just what they wrote, waiting for you.
             </p>
             <div class="actions">
-              <a class="button button-primary" href="#install">Get started</a>
+              <a class="button button-primary" href="#install">Download</a>
               <a class="button button-secondary" href="https://github.com/dielduarte/feedrsauros">View on GitHub</a>
             </div>
           </div>
@@ -447,50 +459,37 @@
           />
         </figure>
 
-        <section id="features" aria-labelledby="features-title">
-          <h2 id="features-title">Everything the sites publish. Nothing else.</h2>
-          <p class="lede">
-            No feed ranks what you see, and nothing is left out. You choose the sites; feedrsauros keeps up with them.
-          </p>
-
-          <ul class="features">
+        <section id="peace" aria-labelledby="peace-title">
+          <h2 id="peace-title">Read in peace.</h2>
+          <ul class="peace">
             <li>
-              <h3>Paste a site, get its feed</h3>
-              <p>Type a website's address and feedrsauros finds its RSS, Atom or JSON feed for you.</p>
+              <h3>Nothing pulls at you.</h3>
+              <p>No ads, no recommendations, no &ldquo;you might also like.&rdquo; Articles, and nothing wrapped around them.</p>
             </li>
             <li>
-              <h3>Folders you arrange</h3>
-              <p>Group feeds into folders and drag them around the sidebar until it reads the way you think.</p>
+              <h3>It ends.</h3>
+              <p>Your list is finite. Read it, mark it done, close it. There&rsquo;s no bottom to scroll toward.</p>
             </li>
             <li>
-              <h3>Checks politely</h3>
-              <p>Busy sites are checked often, quiet ones rarely, and it backs off whenever a site asks it to.</p>
-            </li>
-            <li>
-              <h3>New articles appear on their own</h3>
-              <p>Counts and lists update while the page is open. No reloading to see what's new.</p>
-            </li>
-            <li>
-              <h3>Made for the keyboard</h3>
-              <p>
-                <kbd>J</kbd> and <kbd>K</kbd> to move, <kbd>S</kbd> to star, <kbd>M</kbd> to mark read. Your hands can
-                stay put.
-              </p>
-            </li>
-            <li>
-              <h3>Your data stays yours</h3>
-              <p>Everything lives in one file on your machine. Import and export your subscriptions as OPML anytime.</p>
+              <h3>It waits.</h3>
+              <p>No push notifications, no badges begging for you. New articles are simply there when you come back.</p>
             </li>
           </ul>
         </section>
-
+        <section aria-labelledby="chosen-title">
+          <h2 id="chosen-title">Only what you chose.</h2>
+          <p class="lede">
+            You pick the sites and feedrsauros keeps up with them. Nothing is ranked and nothing is hidden. Paste a
+            site&rsquo;s address and it finds the feed for you.
+          </p>
+        </section>
         <section aria-labelledby="reading-title">
           <div class="reading">
             <div>
-              <h2 id="reading-title">A reader that gets out of the way.</h2>
+              <h2 id="reading-title">Just the words.</h2>
               <p class="lede">
-                Articles open in a clean, wide column with the site's own words and images, and nothing wrapped around
-                them. When you want the original page, it's one key away.
+                Articles open in a clean column with the site&rsquo;s own words and images. When you want the original
+                page, it&rsquo;s one key away.
               </p>
             </div>
             <figure class="shot">
@@ -504,25 +503,36 @@
             </figure>
           </div>
         </section>
-
-        <section id="install" aria-labelledby="install-title">
-          <h2 id="install-title">Up and running in a minute.</h2>
+        <section aria-labelledby="yours-title">
+          <h2 id="yours-title">Yours.</h2>
           <p class="lede">
-            Run it on your own computer, or self-host it. It's one container, and your feeds never leave the machine it
-            runs on.
+            No account. Everything lives in one file on your machine, and the code is open source. Take your
+            subscriptions with you as OPML whenever you like.
           </p>
-
+          <p class="small-things">
+            And the small things: folders you arrange, <kbd>J</kbd> <kbd>K</kbd> <kbd>S</kbd> <kbd>M</kbd> from the
+            keyboard, new articles without reloading.
+          </p>
+        </section>
+        <section id="install" aria-labelledby="install-title">
+          <h2 id="install-title">Start reading.</h2>
           <div class="install">
             <article>
-              <h3>With Docker</h3>
-              <p>Clone the repository and start it. Your subscriptions and articles are kept in a Docker volume.</p>
+              <h3>The desktop app</h3>
+              <p>Download it, open it, paste the address of a site you like.</p>
+              <a class="button button-primary" href="https://github.com/dielduarte/feedrsauros/releases/latest">Download for macOS</a>
+              <p class="note">Windows and Linux builds are coming.</p>
+            </article>
+            <article>
+              <h3>Or self-host the web version</h3>
+              <p>Run it on a home server and read from any browser. It&rsquo;s one container.</p>
               <div class="code">
                 <pre><code>git clone https://github.com/dielduarte/feedrsauros.git
 cd feedrsauros
 docker compose up -d</code></pre>
                 <button class="copy" type="button">Copy</button>
               </div>
-              <p>Then open <a href="http://127.0.0.1:7777">127.0.0.1:7777</a> and add your first feed.</p>
+              <p>Then open <a href="http://127.0.0.1:7777">127.0.0.1:7777</a>.</p>
             </article>
           </div>
         </section>
