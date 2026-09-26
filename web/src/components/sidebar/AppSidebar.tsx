@@ -13,7 +13,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { useStoredState } from '@/hooks/use-stored-state'
 import { cn } from '@/lib/utils'
@@ -97,9 +96,8 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
   return (
     <>
       <Sidebar variant="inset" collapsible="offcanvas">
-        <SidebarHeader className="h-12 flex-row items-center">
-          <SidebarTrigger className="text-muted-foreground" />
-        </SidebarHeader>
+        {/* Empty: spacing above the menu, and room for the desktop window's traffic lights. */}
+        <SidebarHeader data-tauri-drag-region className="h-12 traffic-lights:h-13" />
 
         <SidebarContent>
           <SidebarGroup className="mt-4">

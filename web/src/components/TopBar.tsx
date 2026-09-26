@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, CircleDot, Folder, Inbox, RefreshCw, Star, WifiOff } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, CheckCheck, ChevronDown, Circle, CircleCheck, RefreshCw, Star, WifiOff } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,9 +14,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import type { Item, Sidebar } from '../api'
 import type { Chrome } from '../chrome'
-import type { Lookup } from '../lookup'
 import { scopePath, type Scope } from '../routes'
-import { FeedIcon } from './FeedIcon'
 import { IconAction } from './IconAction'
 
 type Props = {
@@ -34,20 +32,22 @@ export function TopBar({ chrome, onBack, crumb, children }: Props) {
   const sidebarHidden = state === 'collapsed' || isMobile
 
   return (
-    <header className="grid h-13 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-3 border-b px-3">
+    <header
+      // Only the empty bar drags the desktop window; its buttons still click.
+      data-tauri-drag-region
+      className={cn(
+        'grid h-13 shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-3 border-b px-3',
+        // With the sidebar hidden, the desktop window's traffic lights sit over this bar.
+        sidebarHidden && 'traffic-lights:pl-20',
+      )}
+    >
       <div className="flex min-w-0 items-center gap-2">
-        {/* Exactly one icon ever sits before the switcher, so it never shifts or leaves a gap. */}
+        <SidebarTrigger className="size-8 text-muted-foreground" />
         {onBack ? (
           <IconAction label="Back to articles" shortcut="Esc" onClick={onBack}>
             <ArrowLeft />
           </IconAction>
-        ) : sidebarHidden ? (
-          <SidebarTrigger className="size-8 text-muted-foreground" />
-        ) : (
-          <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4" aria-hidden>
-            <ScopeIcon scope={chrome.scope} lookup={chrome.lookup} />
-          </span>
-        )}
+        ) : null}
         <ScopeSwitcher scope={chrome.scope} label={chrome.label} sidebar={chrome.sidebar} onNavigate={chrome.onNavigate} />
       </div>
 
@@ -132,21 +132,6 @@ export function ReaderActions({ item, words, onToggleStar, onToggleRead }: Reade
       ) : null}
     </>
   )
-}
-
-function ScopeIcon({ scope, lookup }: { scope: Scope; lookup: Lookup }) {
-  switch (scope.kind) {
-    case 'all':
-      return <Inbox />
-    case 'unread':
-      return <CircleDot />
-    case 'starred':
-      return <Star />
-    case 'folder':
-      return <Folder />
-    case 'feed':
-      return <FeedIcon siteUrl={lookup.feed(scope.slug)?.site_url ?? null} />
-  }
 }
 
 type SwitcherProps = {

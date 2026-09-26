@@ -7,6 +7,15 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { App } from './App'
 
+declare global {
+  interface Window {
+    __FEEDRSAUROS_TRAFFIC_LIGHTS__?: boolean
+  }
+}
+
+// The desktop app keeps this attribute current as the window enters and leaves fullscreen.
+if (window.__FEEDRSAUROS_TRAFFIC_LIGHTS__) document.documentElement.dataset.trafficLights = ''
+
 const client = new QueryClient({
   defaultOptions: {
     // Live updates arrive over SSE, so background refetching only needs to catch up occasionally.

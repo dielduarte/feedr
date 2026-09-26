@@ -3,6 +3,8 @@
 @plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
+/* Set by the desktop app while its window buttons sit over the page, i.e. unless fullscreen. */
+@custom-variant traffic-lights (&:where([data-traffic-lights], [data-traffic-lights] *));
 
 :root {
   --radius: 0.625rem;
