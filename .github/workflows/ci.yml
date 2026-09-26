@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release half-way through publishing; superseded PR runs can go.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web exec tsc -b
+      - run: pnpm --dir web lint
+      - run: pnpm --dir web test
+      # The server embeds the built web app, so it has to exist before cargo compiles.
+      - run: pnpm --dir web build
+      # The desktop crate needs the GTK/WebKit toolchain on Linux; it's built and tested on macOS below.
+      - run: cargo test --package feedrsauros
+
+  changes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # Website-only or docs-only merges don't need a new app release.
+          filters: |
+            app:
+              - 'src/**'
+              - 'web/**'
+              - 'desktop/**'
+              - 'migrations/**'
+              - 'build.rs'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+  release-desktop:
+    needs: [test, changes]
+    if: needs.changes.outputs.app == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Pick the version
+        # Major and minor come from tauri.conf.json; every release from main bumps the patch.
+        run: echo "VERSION=$(jq -r .version desktop/tauri.conf.json | cut -d. -f1,2).${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web build
+      - run: cargo test --package feedrsauros-desktop
+
+      - name: Build a universal macOS app
+        working-directory: desktop
+        run: >
+          pnpm dlx @tauri-apps/cli@2.11.5 build
+          --target universal-apple-darwin
+          --bundles dmg
+          --config "{\"version\":\"$VERSION\"}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A fixed file name, so releases/latest/download/feedrsauros.dmg always points at the newest build.
+          cp target/universal-apple-darwin/release/bundle/dmg/*.dmg feedrsauros.dmg
+          gh release create "v$VERSION" feedrsauros.dmg \
+            --title "feedrsauros $VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes \
+            --latest
