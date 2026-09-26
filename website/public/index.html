@@ -108,6 +108,22 @@
         color: var(--forest);
       }
 
+      .top nav {
+        align-items: center;
+      }
+
+      .top nav .coffee {
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--forest);
+      }
+
+      .top nav .coffee:hover {
+        border-color: var(--green);
+      }
+
       /* Hero: the one loud moment on the page. */
 
       .hero {
@@ -188,15 +204,18 @@
 
       /* Screenshots */
 
-      /* The screenshots are window captures with their own frame and shadow, so they sit unframed. */
       .shot {
         margin: 0;
       }
 
+      /* Cropped to the app itself, so the page draws the window edge. */
       .shot img {
         display: block;
         width: 100%;
         height: auto;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgb(14 42 31 / 0.05), 0 24px 60px -24px rgb(14 42 31 / 0.25);
       }
 
       /* Features */
@@ -407,7 +426,7 @@
           font-size: 16px;
         }
 
-        .top nav a:not(:last-child) {
+        .top nav a:not(.coffee) {
           display: none;
         }
 
@@ -429,6 +448,7 @@
           <a href="#peace">Read in peace</a>
           <a href="#install">Download</a>
           <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>
+          <a class="coffee" href="https://ko-fi.com/dielduarte">Buy me a coffee</a>
         </nav>
       </header>
 
@@ -454,8 +474,8 @@
           <img
             src="/screenshot-list.png"
             alt="The feedrsauros app: folders of feeds in the sidebar and the latest Rust Blog articles in the list"
-            width="3248"
-            height="2122"
+            width="3024"
+            height="1688"
           />
         </figure>
 
@@ -496,8 +516,8 @@
               <img
                 src="/screenshot-reader.png"
                 alt="An article from the Cloudflare Blog open in the feedrsauros reader"
-                width="3248"
-                height="2122"
+                width="3024"
+                height="1688"
                 loading="lazy"
               />
             </figure>
@@ -543,7 +563,7 @@ docker compose up -d</code></pre>
           <img src="/logo.svg" alt="" width="26" height="26" />
           feedrsauros
         </a>
-        <span>Open source on <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>, by <a href="https://github.com/dielduarte">@dielduarte</a>.</span>
+        <span>Open source on <a href="https://github.com/dielduarte/feedrsauros">GitHub</a>, by <a href="https://github.com/dielduarte">@dielduarte</a>. Enjoying it? <a href="https://ko-fi.com/dielduarte">Buy me a coffee</a>.</span>
       </footer>
     </div>
 
