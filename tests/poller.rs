@@ -338,7 +338,9 @@ mod background {
 
     /// The same database file opened separately, as the CLI or a second server would.
     async fn other_process(env: &Env) -> Db {
-        Db::open(&env._dir.path().join("feedrsauros.db")).await.unwrap()
+        Db::open(&env._dir.path().join("feedrsauros.db"))
+            .await
+            .unwrap()
     }
 
     async fn next_resync(events: &mut broadcast::Receiver<PollerEvent>) {
@@ -361,7 +363,10 @@ mod background {
         assert_eq!(requests(&env), 0);
 
         handle.set_active(true);
-        eventually("the feed is fetched after resuming", async || requests(&env) == 1).await;
+        eventually("the feed is fetched after resuming", async || {
+            requests(&env) == 1
+        })
+        .await;
         cancel.cancel();
     }
 
@@ -369,11 +374,16 @@ mod background {
     async fn only_one_poller_fetches_from_a_database() {
         let env = env().await;
         for name in ["a", "b", "c"] {
-            env.add(env.base.join(&format!("slow/{name}")).unwrap(), Utc::now()).await;
+            env.add(env.base.join(&format!("slow/{name}")).unwrap(), Utc::now())
+                .await;
         }
         let (_first, cancel, _task) = start(&env).await;
         let other = CancellationToken::new();
-        let (_second, _second_task) = poller::spawn(other_process(&env).await, env.fetcher.clone(), other.clone());
+        let (_second, _second_task) = poller::spawn(
+            other_process(&env).await,
+            env.fetcher.clone(),
+            other.clone(),
+        );
 
         eventually("every feed is fetched", async || requests(&env) >= 3).await;
         tokio::time::sleep(Duration::from_millis(300)).await;
@@ -390,7 +400,11 @@ mod background {
         let (_first, cancel, task) = start(&env).await;
         eventually("the first poller fetches", async || requests(&env) == 1).await;
         let other = CancellationToken::new();
-        let (second, _second_task) = poller::spawn(other_process(&env).await, env.fetcher.clone(), other.clone());
+        let (second, _second_task) = poller::spawn(
+            other_process(&env).await,
+            env.fetcher.clone(),
+            other.clone(),
+        );
 
         cancel.cancel();
         task.await.unwrap();
@@ -406,7 +420,11 @@ mod background {
         let (handle, cancel, _task) = start(&env).await;
         let mut events = handle.subscribe();
 
-        other_process(&env).await.create_folder("From the CLI").await.unwrap();
+        other_process(&env)
+            .await
+            .create_folder("From the CLI")
+            .await
+            .unwrap();
 
         next_resync(&mut events).await;
         cancel.cancel();

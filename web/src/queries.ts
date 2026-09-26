@@ -108,6 +108,7 @@ function adjustUnread(client: QueryClient, feedSlug: string, delta: number) {
     const adjust = (feeds: Sidebar['uncategorized']) =>
       feeds.map((feed) => (feed.slug === feedSlug ? { ...feed, unread: Math.max(0, feed.unread + delta) } : feed))
     return {
+      ...sidebar,
       total_unread: Math.max(0, sidebar.total_unread + delta),
       uncategorized: adjust(sidebar.uncategorized),
       folders: sidebar.folders.map((folder) =>
@@ -134,9 +135,12 @@ export function useUpdateItem() {
         patchItem(client, refOf(item), { read_at: patch.read ? now : null })
         adjustUnread(client, item.feed_slug, patch.read ? -1 : 1)
       }
-      if (patch.starred !== undefined) {
+      if (patch.starred !== undefined && patch.starred !== (item.starred_at !== null)) {
         patchItem(client, refOf(item), { starred_at: patch.starred ? now : null })
         if (!patch.starred) removeFromList(client, { kind: 'starred' }, refOf(item))
+        client.setQueryData<Sidebar>(keys.sidebar, (sidebar) =>
+          sidebar && { ...sidebar, total_starred: Math.max(0, sidebar.total_starred + (patch.starred ? 1 : -1)) },
+        )
       }
       return saved
     },

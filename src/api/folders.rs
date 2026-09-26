@@ -10,6 +10,7 @@ use crate::db::{Folder, SidebarFeed};
 #[derive(Serialize)]
 pub struct Sidebar {
     total_unread: u32,
+    total_starred: u32,
     folders: Vec<SidebarFolder>,
     uncategorized: Vec<SidebarFeed>,
 }
@@ -26,6 +27,7 @@ pub async fn sidebar(State(state): State<AppState>) -> Result<Json<Sidebar>, Api
     let sidebar = state.db.sidebar().await?;
     Ok(Json(Sidebar {
         total_unread: sidebar.total_unread(),
+        total_starred: sidebar.starred,
         folders: sidebar
             .folders
             .into_iter()

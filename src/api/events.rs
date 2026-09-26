@@ -17,7 +17,9 @@ pub async fn stream(
     let stream = BroadcastStream::new(state.poller.subscribe()).map(|received| {
         let event = match received {
             Ok(event) => Event::default().json_data(event),
-            Err(BroadcastStreamRecvError::Lagged(_)) => Event::default().json_data(PollerEvent::Resync),
+            Err(BroadcastStreamRecvError::Lagged(_)) => {
+                Event::default().json_data(PollerEvent::Resync)
+            }
         };
         Ok(event.expect("poller events always serialize"))
     });

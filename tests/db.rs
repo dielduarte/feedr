@@ -772,10 +772,7 @@ mod slugs {
             t.db.rename_folder(other.id, "Engineering").await.unwrap(),
             "engineering"
         );
-        assert_eq!(
-            t.db.folder_id("engineering").await.unwrap(),
-            other.id
-        );
+        assert_eq!(t.db.folder_id("engineering").await.unwrap(), other.id);
         assert!(matches!(
             t.db.folder_id("tech-2").await,
             Err(DbError::NotFound)

@@ -6,6 +6,7 @@ const feed = (slug: string) => ({ slug, title: slug, url: `https://${slug}.test/
 
 const sidebar: Sidebar = {
   total_unread: 0,
+  total_starred: 0,
   folders: [{ slug: 'tech', name: 'Tech', unread: 0, feeds: [feed('rust-blog')] }],
   uncategorized: [feed('xkcd')],
 }

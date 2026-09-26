@@ -159,6 +159,21 @@ mod sidebar {
     use super::*;
 
     #[tokio::test]
+    async fn counts_starred_articles() {
+        let api = start().await;
+        let feed = api.subscribe("a.xml", None).await;
+        let items = api.items(&format!("?feed={feed}")).await;
+        for item in &items[..2] {
+            api.patch(&Api::item_path(item), json!({ "starred": true }))
+                .await;
+        }
+        api.patch(&Api::item_path(&items[0]), json!({ "starred": false }))
+            .await;
+
+        assert_eq!(api.sidebar().await["total_starred"], 1);
+    }
+
+    #[tokio::test]
     async fn shows_folders_feeds_and_unread_counts_by_slug() {
         let api = start().await;
         let tech = api.folder("Tech").await;
@@ -172,6 +187,7 @@ mod sidebar {
             ("tech", "example-blog", "example-blog-2")
         );
         assert_eq!(sidebar["total_unread"], 8);
+        assert_eq!(sidebar["total_starred"], 0);
         assert_eq!(sidebar["folders"][0]["slug"], "tech");
         assert_eq!(sidebar["folders"][0]["name"], "Tech");
         assert_eq!(sidebar["folders"][0]["unread"], 4);

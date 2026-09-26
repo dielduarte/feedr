@@ -75,7 +75,9 @@ impl Db {
 
     /// Changes whenever another process commits to the database; this process's writes don't.
     pub async fn data_version(&self) -> Result<i64, DbError> {
-        Ok(sqlx::query_scalar("PRAGMA data_version").fetch_one(&self.pool).await?)
+        Ok(sqlx::query_scalar("PRAGMA data_version")
+            .fetch_one(&self.pool)
+            .await?)
     }
 }
 

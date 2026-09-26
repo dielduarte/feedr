@@ -20,7 +20,9 @@ pub struct Server {
 }
 
 pub async fn start(db: Db, listener: TcpListener) -> anyhow::Result<Server> {
-    let addr = listener.local_addr().context("could not read the listening address")?;
+    let addr = listener
+        .local_addr()
+        .context("could not read the listening address")?;
     let fetcher = Fetcher::new(DEFAULT_TIMEOUT);
     let cancel = CancellationToken::new();
     let (poller, poller_task) = poller::spawn(db.clone(), fetcher.clone(), cancel.clone());

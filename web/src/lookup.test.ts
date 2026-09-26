@@ -6,6 +6,7 @@ const feed = (slug: string, title: string) => ({ slug, title, url: `https://${sl
 
 const sidebar: Sidebar = {
   total_unread: 0,
+  total_starred: 0,
   folders: [{ slug: 'tech', name: 'Tech', unread: 0, feeds: [feed('rust-blog', 'Rust Blog')] }],
   uncategorized: [feed('xkcd', 'xkcd')],
 }
@@ -22,7 +23,7 @@ describe('buildLookup', () => {
 
   it('knows whether there is anything subscribed', () => {
     expect(buildLookup(sidebar).hasFeeds).toBe(true)
-    expect(buildLookup({ total_unread: 0, folders: [{ slug: 'empty', name: 'Empty', unread: 0, feeds: [] }], uncategorized: [] }).hasFeeds).toBe(false)
+    expect(buildLookup({ total_unread: 0, total_starred: 0, folders: [{ slug: 'empty', name: 'Empty', unread: 0, feeds: [] }], uncategorized: [] }).hasFeeds).toBe(false)
     expect(buildLookup(undefined).hasFeeds).toBe(false)
   })
 })

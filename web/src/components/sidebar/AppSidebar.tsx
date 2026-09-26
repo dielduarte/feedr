@@ -112,7 +112,13 @@ export const AppSidebar = memo(function AppSidebar({ scope, sidebar, onNavigate,
                 count={sidebar?.total_unread}
                 onClick={() => onNavigate({ kind: 'unread' })}
               />
-              <NavItem active={isActive(scope, { kind: 'starred' })} icon={<Star />} label="Starred" onClick={() => onNavigate({ kind: 'starred' })} />
+              <NavItem
+                active={isActive(scope, { kind: 'starred' })}
+                icon={<Star />}
+                label="Starred"
+                count={sidebar?.total_starred}
+                onClick={() => onNavigate({ kind: 'starred' })}
+              />
             </SidebarMenu>
           </SidebarGroup>
 

@@ -112,7 +112,14 @@ pub fn spawn(
     };
     let task = tokio::spawn(async move {
         tokio::join!(
-            run(db.clone(), fetcher, wake, events.clone(), active.subscribe(), cancel.clone()),
+            run(
+                db.clone(),
+                fetcher,
+                wake,
+                events.clone(),
+                active.subscribe(),
+                cancel.clone()
+            ),
             watch_other_writers(db, events, active.subscribe(), cancel),
         );
     });
@@ -132,7 +139,12 @@ async fn until_active(active: &mut watch::Receiver<bool>, cancel: &CancellationT
 fn try_lock_polling(db: &Path) -> Option<File> {
     let mut path = db.as_os_str().to_owned();
     path.push(".poller.lock");
-    let file = File::options().create(true).truncate(false).write(true).open(path).ok()?;
+    let file = File::options()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .ok()?;
     file.try_lock().ok()?;
     Some(file)
 }

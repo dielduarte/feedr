@@ -29,7 +29,9 @@ fn main() {
                 .title("feedrsauros")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(720.0, 480.0)
-                .on_navigation(move |target| is_app_url(&in_window, target) || open_in_browser(target))
+                .on_navigation(move |target| {
+                    is_app_url(&in_window, target) || open_in_browser(target)
+                })
                 .on_new_window(move |target, _| {
                     if !is_app_url(&in_new_window, &target) {
                         open_in_browser(&target);

@@ -20,6 +20,7 @@ export interface SidebarFolder {
 
 export interface Sidebar {
   total_unread: number
+  total_starred: number
   folders: SidebarFolder[]
   uncategorized: SidebarFeed[]
 }

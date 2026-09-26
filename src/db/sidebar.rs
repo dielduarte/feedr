@@ -8,6 +8,7 @@ use crate::model::{FeedId, FolderId};
 pub struct Sidebar {
     pub folders: Vec<SidebarFolder>,
     pub uncategorized: Vec<SidebarFeed>,
+    pub starred: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -84,9 +85,16 @@ impl Db {
             }
         }
 
+        let starred = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "count!: u32" FROM items WHERE starred_at IS NOT NULL"#
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
         Ok(Sidebar {
             folders,
             uncategorized,
+            starred,
         })
     }
 }
