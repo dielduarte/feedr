@@ -260,7 +260,7 @@ function FeedRow({ feed, nested, active, renaming, dropBefore, dragProps, onOpen
     <SidebarMenuItem className={cn(nested && 'pl-4', dropBefore && dropLine)} draggable={!renaming && !feed.pending} {...dragProps}>
       {feed.pending ? (
         <SidebarMenuButton isActive={active} onClick={onOpen} aria-busy className="text-muted-foreground data-[active=true]:text-foreground">
-          <img src="/dino-loading.svg" alt="" className="size-4" />
+          <FeedIcon siteUrl={null} />
           <span className="truncate">{feed.title}</span>
         </SidebarMenuButton>
       ) : renaming ? (
