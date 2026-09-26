@@ -95,3 +95,10 @@ The desktop app (in `desktop/`, built with [Tauri](https://tauri.app)) runs the 
 pnpm --dir web build                  # the window shows the built web app
 cargo run -p feedrsauros-desktop      # FEEDRSAUROS_DB=… to point it at another database
 ```
+
+`cargo run` shows up in the Dock as `feedrsauros-desktop`. To get a real app named feedrsauros, bundle it:
+
+```bash
+cd desktop && pnpm dlx @tauri-apps/cli build --bundles app
+open ../target/release/bundle/macos/feedrsauros.app
+```
